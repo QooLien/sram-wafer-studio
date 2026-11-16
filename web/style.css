@@ -109,7 +109,9 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 
 .table-scroll tr.address-match{background:#d5f4ed;outline:2px solid #3aa99a;outline-offset:-2px}
 
-#data-table{max-height:clamp(240px,calc(100dvh - 232px),810px)}
+#page-data{padding-bottom:12px}
+#data-table{position:relative;max-height:clamp(120px,calc(100dvh - 232px),810px);overscroll-behavior:contain}
+#data-table:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 #block-detail summary{cursor:pointer;padding:11px 14px;font-weight:650}
 #block-detail summary h3{display:inline;padding:0;margin-left:5px}
 #block-detail details[open] summary{border-bottom:1px solid var(--border)}
@@ -118,7 +120,8 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
   position:sticky;width:var(--address-key);min-width:var(--address-key);max-width:var(--address-key);
   text-align:center;padding:6px 2px;z-index:1;background:#fff;
 }
-.address-table thead th:nth-child(-n+7){z-index:3;background:#e9f0f6}
+.address-table thead th{position:sticky;top:0;z-index:3;background:#e9f0f6;box-shadow:0 1px #a9bacb}
+.address-table thead th:nth-child(-n+7){z-index:4;background:#e9f0f6}
 .address-table tbody tr:nth-child(even) td:nth-child(-n+7){background:#f8fbfe}
 .address-table tbody tr.address-match td:nth-child(-n+7){background:#d5f4ed}
 .address-table :is(th,td):nth-child(1){left:0}
@@ -128,3 +131,4 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .address-table :is(th,td):nth-child(5){left:calc(var(--address-key)*4)}
 .address-table :is(th,td):nth-child(6){left:calc(var(--address-key)*5)}
 .address-table :is(th,td):nth-child(7){left:calc(var(--address-key)*6);box-shadow:1px 0 #a9bacb}
+.address-table thead th:nth-child(7){box-shadow:1px 1px #a9bacb}

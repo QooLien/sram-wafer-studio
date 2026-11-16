@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, viewPage:0, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const chipKey = row => row.x + ',' + row.y;
@@ -30,6 +30,7 @@ function notice(text, type='') {
   const node = $('notice'); node.hidden = !text; node.textContent = text;
   node.className = type;
   fitMapStage();
+  fitDataTable();
 }
 function safe(fn) {
   return async event => {
@@ -38,7 +39,13 @@ function safe(fn) {
   };
 }
 function navigate(page) {
-  if (s.page !== page) window.scrollTo(0,0);
+  if (s.page !== page) {
+    if (page === 'data') {
+      s.dataReturn={page:s.page,top:window.scrollY};
+      $('data-back').title='返回 '+labels[s.page];
+    }
+    window.scrollTo(0,0);
+  }
   s.page = page;
   for (const key of Object.keys(labels)) $('page-' + key).hidden = key !== page;
   document.querySelectorAll('.nav').forEach(button => {
@@ -55,6 +62,11 @@ document.addEventListener('click', safe(event => {
   const btn = event.target.closest('button[data-page]');
   if (btn) return navigate(btn.dataset.page);
 }));
+$('data-back').onclick=safe(async()=>{
+  const {page,top}=s.dataReturn;
+  await navigate(page);
+  window.scrollTo(0,top);
+});
 function renderFiles(batch=false) {
   const list = batch ? s.batch : s.files;
   const id = batch ? 'batch-files' : 'full-files';
@@ -576,6 +588,14 @@ async function refreshDetail() {
   body.append(section('Fail Address / Monitor 匹配',table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses),true));
   put('block-detail',title,body);setMapStage(s.mapStage);
 }
+function fitDataTable() {
+  if (s.page !== 'data' || !s.report) return;
+  const viewport=$('data-table');
+  const top=viewport.getBoundingClientRect().top+window.scrollY;
+  const footer=$('data-results').querySelector('.pagination').offsetHeight;
+  viewport.style.maxHeight=Math.max(120,Math.floor(window.innerHeight-top-footer-16))+'px';
+}
+window.addEventListener('resize',fitDataTable);
 async function refreshTable() {
   const mode=$('data-view').value,id=++s.versions;
   $('data-scope').hidden=mode!=='audit';
@@ -587,13 +607,18 @@ async function refreshTable() {
   s.viewPage=result.page;s.targetAddress=null;
   const rendered=table(result.headers,result.rows);
   rendered.classList.toggle('address-table',mode==='address');
+  const viewport=$('data-table');
   put('data-table',rendered);
-  if(result.highlighted!==null){
-    const row=rendered.tBodies[0].rows[result.highlighted];
-    row.classList.add('address-match');row.scrollIntoView({block:'nearest'});
-  }
+  viewport.scrollTop=0;
   $('prev').disabled=s.viewPage===0;$('next').disabled=!result.more;
   $('page-no').textContent='第 '+(s.viewPage+1)+' 頁';
+  fitDataTable();
+  if(result.highlighted!==null){
+    const row=rendered.tBodies[0].rows[result.highlighted];
+    row.classList.add('address-match');
+    const relativeTop=row.getBoundingClientRect().top-viewport.getBoundingClientRect().top;
+    viewport.scrollTop=relativeTop-rendered.tHead.offsetHeight;
+  }
 }
 for(const id of ['data-view','data-wt','data-pattern','filter-chip']) $(id).onchange=safe(()=>{s.viewPage=0;return refreshTable();});
 $('prev').onclick=safe(()=>{if(s.viewPage>0)s.viewPage--;return refreshTable();});

@@ -65,7 +65,10 @@
   </div>
 </section>
 <section class="page" id="page-data" hidden>
-  <div class="heading audit-heading"><div><h1>資料核對</h1><p>依 WT、Pattern 或 Chip 篩選，查看 Address 與 FBC 的對應。</p></div><button id="open-xlsm" class="secondary">核對既有 VBA 結果</button></div>
+  <div class="heading audit-heading">
+    <div><h1>資料核對</h1><p>依 WT、Pattern 或 Chip 篩選，查看 Address 與 FBC 的對應。</p></div>
+    <div class="actions"><button id="data-back" type="button" class="secondary">← 返回上一頁</button><button id="open-xlsm" class="secondary">核對既有 VBA 結果</button></div>
+  </div>
   <div class="empty card" id="data-empty">匯入 ASC 後即可查看資料。<button class="secondary" data-page="import">前往匯入</button></div>
   <section class="card" id="data-results" hidden>
     <div class="toolbar">
@@ -73,8 +76,8 @@
       <label id="data-scope">Pattern <select id="data-pattern"></select></label>
       <label class="checkbox"><input type="checkbox" id="filter-chip"> 只看選取的 Chip</label>
     </div>
-    <div id="data-table" class="table-scroll"></div>
-    <div class="pagination"><button id="prev" class="secondary">上一頁</button><span id="page-no"></span><button id="next" class="secondary">下一頁</button></div>
+    <div id="data-table" class="table-scroll" tabindex="0" role="region" aria-label="資料核對表格"></div>
+    <div class="pagination"><button id="prev" class="secondary">上一頁資料</button><span id="page-no"></span><button id="next" class="secondary">下一頁資料</button></div>
   </section>
 </section>
 <section class="page" id="page-batch" hidden>
