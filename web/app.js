@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], viewPage:0, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, viewPage:0, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const chipKey = row => row.x + ',' + row.y;
@@ -29,6 +29,7 @@ async function api(path, body) {
 function notice(text, type='') {
   const node = $('notice'); node.hidden = !text; node.textContent = text;
   node.className = type;
+  fitMapStage();
 }
 function safe(fn) {
   return async event => {
@@ -37,6 +38,7 @@ function safe(fn) {
   };
 }
 function navigate(page) {
+  if (s.page !== page) window.scrollTo(0,0);
   s.page = page;
   for (const key of Object.keys(labels)) $('page-' + key).hidden = key !== page;
   document.querySelectorAll('.nav').forEach(button => {
@@ -90,9 +92,41 @@ async function selectAsc(batch) {
   }
   renderFiles(batch);
 }
+const mapStages = {wafer:'map-layout',matrix:'distribution',detail:'block-detail'};
+function fitMapStage() {
+  if(s.page!=='maps'||s.mapStage==='detail')return;
+  const board = $(s.mapStage==='wafer'?'wafer-grid':'blk-grid');
+  if(!board.childElementCount||!board.getClientRects().length)return;
+  const top = board.getBoundingClientRect().top + window.scrollY;
+  board.style.setProperty('--visible-height',Math.max(0,window.innerHeight-top-14)+'px');
+}
+window.addEventListener('resize',fitMapStage);
+function setMapStage(stage, moveFocus=false) {
+  const ready = {wafer:true,matrix:s.blocks.length>0,detail:s.block!==null&&$('block-detail').hasChildNodes()};
+  if (!ready[stage]) stage='wafer';
+  s.mapStage=stage;
+  for (const [key,id] of Object.entries(mapStages)) {
+    const active = key===stage;
+    $(id).hidden=!active;
+    const button = $('stage-'+key);
+    button.disabled=!ready[key];
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-pressed',active);
+  }
+  $('layer-label').hidden=stage!=='wafer';
+  $('pattern-label').hidden=stage!=='wafer'||!['fail','loss','wr'].includes(s.layer);
+  if (moveFocus) {
+    window.scrollTo(0,0);
+    $('stage-'+stage).focus({preventScroll:true});
+  }
+  fitMapStage();
+}
+for (const button of document.querySelectorAll('[data-stage]')) {
+  button.onclick=()=>setMapStage(button.dataset.stage,true);
+}
 function setReport(report) {
   s.report = report; s.wt = report.wt_numbers[0]; s.selected = null; s.block = null; s.blocks = []; s.viewPage = 0;
-  s.pattern = report.patterns[0] || '';
+  s.pattern = report.patterns[0] || ''; s.detailPattern = null;
   s.layer = report.source_mode === 'address' ? 'cat' : 'fail';
   const pats = Object.fromEntries(report.patterns.map(p=>[p,p]));
   options($('pattern'),pats,s.pattern);
@@ -110,7 +144,7 @@ function setReport(report) {
   options($('data-view'),available);
   $('map-empty').hidden = $('data-empty').hidden = true;
   $('map-results').hidden = $('data-results').hidden = false;
-  $('distribution').hidden = $('block-detail').hidden = true;
+  put('blk-grid'); put('block-detail'); setMapStage('wafer');
   $('map-caption').textContent = report.label+' · '+report.manifest[0].lot;
 }
 function showPaths(output, warnings) {
@@ -230,7 +264,7 @@ async function refreshMap() {
     button.onclick=safe(async()=>{s.wt=wt;$('data-wt').value=wt;await refreshMap();if(s.block!==null) await refreshDetail();});
     return button;
   }));
-  $('pattern-label').hidden=!['fail','loss','wr'].includes(s.layer);
+  setMapStage(s.mapStage);
   const legend={fail:[['#fff2cc','1–9'],['#ffe699','10–19'],['#ffd966','20–49'],['#bf8f00','50+'],['#808080','依 Cat 灰底']],
     wr:[['#fff','左上 Read'],['#ffd966','右上 Write'],['#ff6600','左下 W&R'],['#fff','右下 No Monitor'],['#00b0f0','全 BLK 通過']],
     loss:[['#fff','左 Fail BLK'],['#ff433c','右 Loss BLK'],['#00b0f0','全 BLK 通過']],
@@ -246,7 +280,7 @@ async function refreshMap() {
   board.style.setProperty('--wafer-columns', nx);
   board.style.setProperty('--wafer-rows', ny);
   board.style.setProperty('--wafer-min', Math.max(nx, ny) * 20 + 'px');
-  board.style.setProperty('--wafer-max', Math.min(520, Math.min(nx, ny) * 62) + 'px');
+  board.style.setProperty('--wafer-max', Math.min(660, Math.min(nx, ny) * 66) + 'px');
   const axis=(text,col,row)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=row;board.append(a);};
   axis('Y/X',1,1);
   for(let x=x0;x<=x1;x++) axis(x,x-x0+2,1);
@@ -261,15 +295,19 @@ async function refreshMap() {
     chip.dataset.active=String(s.selected===chipKey(row));
     for(const [value,bg,fg] of values){ const span=el('span',value);span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span); }
     chip.onclick=safe(async()=>{
-      s.selected=chipKey(row);s.block=null;s.blocks=[];
-      $('block-detail').hidden=true;
+      const selected = chipKey(row);
+      s.selected=selected;s.block=null;s.blocks=[];s.detailPattern=s.pattern;
+      put('block-detail');setMapStage('wafer');
       board.querySelectorAll('.chip').forEach(btn=>{btn.dataset.active=String(btn.dataset.chip===s.selected);});
       showChip(row);
-      if(s.report.source_mode!=='address') await refreshGrid();
+      if(s.report.source_mode==='address')return;
+      await refreshGrid();
+      if(s.page==='maps'&&s.selected===selected&&s.blocks.length)setMapStage('matrix',true);
     });
     board.append(chip);
   }
   showChip(rows.find(r=>chipKey(r)===s.selected));
+  fitMapStage();
 }
 $('layer').onchange=safe(()=>{s.layer=$('layer').value;return refreshMap();});
 $('pattern').onchange=safe(()=>{s.pattern=$('pattern').value;return refreshMap();});
@@ -287,7 +325,6 @@ async function refreshGrid() {
   const entries=await api(params({view:'grid',...selection()}));
   if(id!==s.gridVersion || s.page!=='maps')return;
   s.blocks=entries;
-  $('distribution').hidden=false;
   const {x,y}=selection();$('dist-title').textContent='256 BLK Distribution · X'+x+' Y'+y;
   $('dist-wts').textContent='狀態由左至右  '+s.report.wt_numbers.map(wt=>'WT'+wt).join(' / ');
   const board=$('blk-grid');board.replaceChildren();
@@ -309,7 +346,17 @@ async function refreshGrid() {
       band.title=phaseSummary[index];bars.append(band);
     }
     btn.append(bars);
-    btn.onclick=safe(async()=>{s.block=entry.blk;board.querySelectorAll('.block.selected').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');await refreshDetail();$('block-detail').scrollIntoView({block:'start'});});
+    btn.onclick=safe(async()=>{
+      const selected=s.selected;
+      s.block=entry.blk;
+      board.querySelector('.block.selected')?.classList.remove('selected');
+      btn.classList.add('selected');
+      put('block-detail');setMapStage('matrix');
+      await refreshDetail();
+      if(s.page==='maps'&&s.mapStage==='matrix'&&s.selected===selected&&s.block===entry.blk&&$('block-detail').hasChildNodes()){
+        setMapStage('detail',true);
+      }
+    });
     board.append(btn);
   }
 }
@@ -323,10 +370,15 @@ function table(headers, rows) {
   }
   return table;
 }
-function section(title, node) {
-  const block=el('section',null,'detail-section');
+function section(title, node, collapsible=false) {
+  const block=el(collapsible?'details':'section',null,'detail-section');
   const sc=el('div',null,'table-scroll');sc.append(node);
-  block.append(el('h3',title),sc);return block;
+  const caption=el('h3',title);
+  if(collapsible){
+    const summary=el('summary');
+    summary.append(caption);block.append(summary,sc);
+  } else block.append(caption,sc);
+  return block;
 }
 function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
   const wrap = el('div', null, 'plot');
@@ -335,7 +387,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
   svg.setAttribute('viewBox', '0 0 '+width+' 318');
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', label);
-  svg.style.minWidth = width+'px';
+  svg.style.minWidth = Math.max(500,width-30)+'px';
   wrap.append(svg);
   const add = (tag, attrs, value, parent=svg) => {
     const node = document.createElementNS(ns, tag);
@@ -353,7 +405,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
   }
   add('line',{x1:left,x2:left,y1:top,y2:bottom,class:'chart-axis'});
   add('line',{x1:left,x2:right,y1:bottom,y2:bottom,class:'chart-axis'});
-  add('text',{x:(left+right)/2,y:303,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage（Config 順序）');
+  add('text',{x:(left+right)/2,y:303,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config 順序');
   return {wrap,add,left,right,bottom,tickY,y};
 }
 function chartMark(chart, tag, attrs, description) {
@@ -382,12 +434,12 @@ function accumulationChart(pattern, stations, result) {
     if (last?.voltage === station.v) last.end = i;
     else runs.push({voltage:station.v,start:i,end:i});
   }
-  const width = Math.max(640,runs.length*82+115,stations.length*18+115);
+  const width = Math.max(560,runs.length*66+108,stations.length*15+108);
   const chart = chartFrame(pattern+' FBC90% 累積曲線','累積比例',100,[0,25,50,75,90,100],width,n=>n+'%');
   const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
   for (const run of runs) {
     chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label'},
-      run.voltage === null ? '未設定' : vfmt(run.voltage));
+      run.voltage === null ? '—' : vfmt(run.voltage).slice(0,-2));
   }
   if (result.peak > 0) chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
   const points = stations.map(station=>station.accumulated*100);
@@ -420,8 +472,8 @@ function voltageDistribution(pattern, stations) {
     item.append(swatch,func);legend.append(item);
   }
   article.append(legend);
-  const groupWidth = Math.max(82,...[...groups.values()].map(rows=>rows.length*16+16));
-  const width = Math.max(640,groups.size*groupWidth+115);
+  const groupWidth = Math.max(65,...[...groups.values()].map(rows=>rows.length*15+14));
+  const width = Math.max(560,groups.size*groupWidth+108);
   const peak = Math.max(1,...recorded.map(row=>row.fbc));
   const step = Math.ceil(peak/Math.min(4,peak));
   const top = step*Math.ceil(peak/step);
@@ -432,7 +484,7 @@ function voltageDistribution(pattern, stations) {
   for (const [index,[voltage,rows]] of [...groups].entries()) {
     const mid = chart.left + (index+.5)*stride;
     const slot = Math.min(20,(stride-12)/rows.length);
-    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(voltage));
+    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(voltage).slice(0,-2));
     for (const [i,station] of rows.entries()) {
       if (station.fbc === null) continue;
       const height = chart.bottom-chart.y(station.fbc);
@@ -454,7 +506,7 @@ function patternCharts(details) {
   const field = el('label','Pattern');
   field.append(selector);
   heading.append(field);
-  options(selector,Object.fromEntries(names.map(name=>[name,name])),s.pattern);
+  options(selector,Object.fromEntries(names.map(name=>[name,name])),s.detailPattern||s.pattern);
   const exportStatus = el('p',null,'pattern-export-status');
   exportStatus.setAttribute('role','status');
   exportStatus.hidden = true;
@@ -488,7 +540,7 @@ function patternCharts(details) {
       section('同 Pattern 電壓分布 · FBC',voltageDistribution(name,stations))
     );
   };
-  selector.onchange = render;
+  selector.onchange = ()=>{s.detailPattern=selector.value;render();};
   render();
   panel.append(heading,exportStatus,charts);
   return panel;
@@ -502,14 +554,14 @@ async function refreshDetail() {
   const {x,y}=selection();
   title.append(el('h2','WT'+s.wt+' · X'+x+' Y'+y+' · BLK '+s.block),el('span',s.report.mode));
   const body=el('div',null,'details-body');
+  if (Object.keys(details.fbc90).length) body.append(patternCharts(details));
   const block=s.blocks[s.block];
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
-    block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r]))));
+    block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
   body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC'],
-    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,vfmt(c.voltage),c.peak]))));
-  if (Object.keys(details.fbc90).length) body.append(patternCharts(details));
+    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,vfmt(c.voltage),c.peak])),true));
   body.append(section('Function sweep（Config 順序）',table(['Pattern','TNO','Func.','Test Voltage','FBC','狀態'],
-    details.sweep.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state]))));
+    details.sweep.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])),true));
   const addresses=details.addresses.map(r=>{
     const cell=el('td'), btn=el('button','查看地址','quiet');
     btn.onclick=safe(()=>{
@@ -521,8 +573,8 @@ async function refreshDetail() {
     voltage.title='Function TNO '+r.function.join(', ');
     return [r.pattern,...r.address,voltage,r.write,r.read,r.category,cell];
   });
-  body.append(section('Fail Address / Monitor 匹配',table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses)));
-  $('block-detail').hidden=false;put('block-detail',title,body);
+  body.append(section('Fail Address / Monitor 匹配',table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses),true));
+  put('block-detail',title,body);setMapStage(s.mapStage);
 }
 async function refreshTable() {
   const mode=$('data-view').value,id=++s.versions;
@@ -534,6 +586,7 @@ async function refreshTable() {
   if(id!==s.versions||s.page!=='data')return;
   s.viewPage=result.page;s.targetAddress=null;
   const rendered=table(result.headers,result.rows);
+  rendered.classList.toggle('address-table',mode==='address');
   put('data-table',rendered);
   if(result.highlighted!==null){
     const row=rendered.tBodies[0].rows[result.highlighted];

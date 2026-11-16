@@ -292,7 +292,7 @@ def main():
 
     api = DesktopAPI()
     api._window = webview.create_window("SRAM Wafer Studio", html=desktop_html(), js_api=api,
-                                        width=1440, height=950, min_size=(760, 600))
+                                        width=1440, height=900, min_size=(760, 600), maximized=True)
     webview.start(gui="edgechromium", http_server=False)
 
 

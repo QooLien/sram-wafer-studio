@@ -4,7 +4,7 @@
 
 ## 啟動
 
-在 Windows 解壓縮下載檔，雙擊 **Start SRAM Wafer Studio.cmd** 即可開啟桌面視窗。需要 Python 3.11 以上（加入 PATH）和 Microsoft Edge WebView2 Runtime。初次啟動若缺少套件，啟動程式會在專案內建立 Python 環境並安裝依賴。
+在 Windows 解壓縮下載檔，雙擊 **Start SRAM Wafer Studio.cmd** 即可開啟桌面視窗。啟動時會最大化，版面以 1920×1080 及 Windows 125% 縮放為目標。需要 Python 3.11 以上（加入 PATH）和 Microsoft Edge WebView2 Runtime。初次啟動若缺少套件，啟動程式會在專案內建立 Python 環境並安裝依賴。
 
 也可執行 `python -m pip install -r requirements.txt` 後執行 `python app.py` 開啟同一個桌面視窗。所有操作均在本機處理，無需開啟瀏覽器、輸入 IP 或使用連接埠。
 
@@ -13,8 +13,8 @@
 ## 操作
 
 1. **匯入 ASC** 選同一片 wafer 的 1～3 個檔案。優先採用檔名中的 WT1／WT2／WT3，只有 WT3 時就顯示 WT3。所有檔名皆無 WT 時按 STEP 補編號，混合命名無法唯一對應時請補齊檔名。需要試跑時可使用「載入 128 芯片範例」。
-2. **Wafer Maps** 可切換已匯入的 WT 和 Pattern。Wafer 的 X/Y 分布區維持等寬高。點選 Chip 可展開 16 × 16 BLK 矩陣，窄視窗可水平捲動。每格依實際 WT 顯示狀態色帶，再點 BLK 可切換 Pattern，查看 90% 累積曲線、依 Func. 分色的電壓 FBC 分布和地址匹配。Function 匹配顯示 Config 電壓。 選定 Pattern 後可匯出向量 PDF、300 dpi PNG 或含可編輯圖表、數據和地址匹配的 Excel。選擇目的地後，檔案寫入其中的 `Analysis_YYYYMMDD/`。
-3. **資料核對** 可切換 Fail Address、BLK_FBC_Comparison、Missing BLK Address 和 Chip Vmin。Chip 選取連動資料核對範圍。
+2. **Wafer Maps** 可切換已匯入的 WT 和 Pattern。Wafer 的 X/Y 分布區維持等寬高。點選 Chip 可展開 16 × 16 BLK 矩陣，窄視窗可水平捲動。上方可切換 Wafer Map、256 BLK、BLK 明細，並直接切換 WT。點 BLK 後可切換 Pattern，並排查看 90% 累積曲線、依 Func. 分色的電壓 FBC 分布和地址匹配。Function 匹配顯示 Config 電壓。 選定 Pattern 後可匯出向量 PDF、300 dpi PNG 或含可編輯圖表、數據和地址匹配的 Excel。選擇目的地後，檔案寫入其中的 `Analysis_YYYYMMDD/`。
+3. **資料核對** 可切換 Fail Address、BLK_FBC_Comparison、Missing BLK Address 和 Chip Vmin。Chip 選取連動資料核對範圍。橫向檢視 Fail Address 時會固定 X、Y、BLK、WL、BL、IO 和 Cat.。
 4. **匯出報表** 可選「完整 Excel 報表（原版版面）」匯出 Config、Fail Address、FBC 對照、含導覽連結的 Wafer Maps 及選定 Chip 的 256 BLK 分布。也可分別匯出 Address、FBC、Cat Map，或輸出整組圖片寬 37 公分的 PowerPoint。
 5. **批次匯出** 可選不同 Lot／Wafer。依完整 LOT 和 WNO 分組；檔名使用前六碼 LOT、Wafer、檔名 WT 標記、ASC 版本及匯出日期。每片只輸出 Cat Wafer Map、Fail Address、Fail BLK 到來源資料夾下的 Address_日期。
 6. **TNO 設定** 內的完整版和批次版各自儲存，初始值來自已發佈的 v13.1 與 v1.6。可匯入含 Config 工作表的 Excel 或 CSV，並調整列順序。

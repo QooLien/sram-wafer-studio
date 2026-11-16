@@ -34,17 +34,28 @@
   </div>
 </section>
 <section class="page" id="page-maps" hidden>
-  <div class="heading"><h1>Wafer Maps</h1><p id="map-caption">選取 Chip 查看各 WT 的 BLK 分佈。</p></div>
+  <div class="heading map-heading"><h1>Wafer Maps</h1><p id="map-caption"></p></div>
   <div class="empty card" id="map-empty">匯入 ASC 後即可查看 Wafer Map。<button class="secondary" data-page="import">前往匯入</button></div>
   <div id="map-results" hidden>
-    <div class="kpis" id="kpis"></div>
-    <div class="map-layout">
+    <div class="card toolbar map-controls">
+      <div class="chips stage-list" aria-label="分析檢視">
+        <button id="stage-wafer" type="button" data-stage="wafer" aria-controls="map-layout" aria-pressed="true">Wafer Map</button>
+        <button id="stage-matrix" type="button" data-stage="matrix" aria-controls="distribution" aria-pressed="false" disabled>256 BLK</button>
+        <button id="stage-detail" type="button" data-stage="detail" aria-controls="block-detail" aria-pressed="false" disabled>BLK 明細</button>
+      </div>
+      <div id="wt-list" class="chips" aria-label="測試溫度階段"></div>
+      <label id="pattern-label">Pattern <select id="pattern"></select></label>
+      <label id="layer-label">圖層 <select id="layer"></select></label>
+    </div>
+    <div id="map-layout" class="map-layout">
       <section class="card map-card">
-        <div class="toolbar"><div id="wt-list" class="chips" aria-label="測試溫度階段"></div><label id="pattern-label">Pattern <select id="pattern"></select></label><label>圖層 <select id="layer"></select></label></div>
         <div id="map-legend" class="legend"></div>
         <div class="map-scroll"><div id="wafer-grid" class="wafer"></div></div>
       </section>
-      <aside class="card chip-card" id="chip-summary"></aside>
+      <aside class="map-inspector">
+        <section class="kpis" id="kpis" aria-label="匯入統計"></section>
+        <section class="card chip-card" id="chip-summary"></section>
+      </aside>
     </div>
     <section class="card distribution" id="distribution" hidden>
       <div class="section-title"><div><h2 id="dist-title">256 BLK Distribution</h2><p id="dist-wts"></p></div><div id="dist-legend" class="legend"></div></div>
