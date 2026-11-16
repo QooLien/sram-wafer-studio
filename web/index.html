@@ -43,7 +43,7 @@
         <button id="stage-matrix" type="button" data-stage="matrix" aria-controls="distribution" aria-pressed="false" disabled>256 BLK</button>
         <button id="stage-detail" type="button" data-stage="detail" aria-controls="block-detail" aria-pressed="false" disabled>BLK 明細</button>
       </div>
-      <div id="wt-list" class="chips" aria-label="測試溫度階段"></div>
+      <div id="wt-list" class="chips" aria-label="Test stages"></div>
       <label id="pattern-label">Pattern <select id="pattern"></select></label>
       <label id="layer-label">圖層 <select id="layer"></select></label>
     </div>
@@ -58,8 +58,8 @@
       </aside>
     </div>
     <section class="card distribution" id="distribution" hidden>
-      <div class="section-title"><div><h2 id="dist-title">256 BLK Distribution</h2><p id="dist-wts"></p></div><div id="dist-legend" class="legend"></div></div>
-      <div class="blk-scroll" tabindex="0" role="region" aria-label="可水平捲動的 256 BLK 矩陣"><div id="blk-grid" class="blocks"></div></div>
+      <div class="section-title"><div><h2 id="dist-title">256 BLK Distribution</h2><p id="dist-wts"></p><p id="dist-worst" hidden></p></div><div id="dist-legend" class="legend"></div></div>
+      <div class="blk-scroll" tabindex="0" role="region" aria-label="Scrollable 256-block matrix"><div id="blk-grid" class="blocks"></div></div>
     </section>
     <section class="card distribution" id="block-detail" hidden></section>
   </div>

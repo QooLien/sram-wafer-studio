@@ -13,7 +13,7 @@
 ## 操作
 
 1. **匯入 ASC** 選同一片 wafer 的 1～3 個檔案。優先採用檔名中的 WT1／WT2／WT3，只有 WT3 時就顯示 WT3。所有檔名皆無 WT 時按 STEP 補編號，混合命名無法唯一對應時請補齊檔名。需要試跑時可使用「載入 128 芯片範例」。
-2. **Wafer Maps** 可切換已匯入的 WT 和 Pattern。Wafer 的 X/Y 分布區維持等寬高。點選 Chip 可展開 16 × 16 BLK 矩陣，窄視窗可水平捲動。上方可切換 Wafer Map、256 BLK、BLK 明細，並直接切換 WT。點 BLK 後可切換 Pattern，並排查看 90% 累積曲線、依 Func. 分色的電壓 FBC 分布和地址匹配。Function 匹配顯示 Config 電壓。同一 WT 的 BLK 若 Scan Pass、March Fail，點選後會直接展開 March 的 Function sweep。 選定 Pattern 後可匯出向量 PDF、300 dpi PNG 或含可編輯圖表、數據和地址匹配的 Excel。選擇目的地後，檔案寫入其中的 `Analysis_YYYYMMDD/`。
+2. **Wafer Maps** 可切換已匯入的 WT 和 Pattern。Wafer 的 X/Y 分布區維持等寬高。點選 Chip 可展開 16 × 16 BLK 矩陣，窄視窗可水平捲動。上方可切換 Wafer Map、256 BLK、BLK 明細，並直接切換 WT。點 BLK 後可切換 Pattern，並排查看 90% 累積曲線、依 Func. 分色的電壓 FBC 分布和地址匹配。Function 匹配顯示 Config 電壓。同一 WT 的 BLK 若 Scan Pass、March Fail，點選後會直接展開 March 的 Function sweep。 圖表標籤使用英文。Hard Fail 明細列出各 WT 實際觸發的 TNO、電壓與 FBC。矩陣用紅色粗體標出目前 Chip、WT 下 Scan 和 March 各自最高的有效 Vmin，同值 BLK 一併標記。 選定 Pattern 後可匯出向量 PDF、300 dpi PNG 或含可編輯圖表、數據和地址匹配的 Excel。選擇目的地後，檔案寫入其中的 `Analysis_YYYYMMDD/`。
 3. **資料核對** 可切換 Fail Address、BLK_FBC_Comparison、Missing BLK Address 和 Chip Vmin。Chip 選取連動資料核對範圍。Fail Address 捲動時固定表頭及 X、Y、BLK、WL、BL、IO、Cat. 欄。「返回上一頁」會回到進入資料核對前的畫面與位置。
 4. **匯出報表** 可選「完整 Excel 報表（原版版面）」匯出 Config、Fail Address、FBC 對照、含導覽連結的 Wafer Maps 及選定 Chip 的 256 BLK 分布。也可分別匯出 Address、FBC、Cat Map，或輸出整組圖片寬 37 公分的 PowerPoint。
 5. **批次匯出** 可選不同 Lot／Wafer。依完整 LOT 和 WNO 分組；檔名使用前六碼 LOT、Wafer、檔名 WT 標記、ASC 版本及匯出日期。每片只輸出 Cat Wafer Map、Fail Address、Fail BLK 到來源資料夾下的 Address_日期。

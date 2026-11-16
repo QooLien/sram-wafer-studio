@@ -277,12 +277,12 @@ async function refreshMap() {
     return button;
   }));
   setMapStage(s.mapStage);
-  const legend={fail:[['#fff2cc','1–9'],['#ffe699','10–19'],['#ffd966','20–49'],['#bf8f00','50+'],['#808080','依 Cat 灰底']],
-    wr:[['#fff','左上 Read'],['#ffd966','右上 Write'],['#ff6600','左下 W&R'],['#fff','右下 No Monitor'],['#00b0f0','全 BLK 通過']],
-    loss:[['#fff','左 Fail BLK'],['#ff433c','右 Loss BLK'],['#00b0f0','全 BLK 通過']],
-    cat:[['#c6efce','C1–2'],['#bdd7ee','C3–4'],['#f8cbad','C5–8'],['#ff9999','C9'],['#bfbfbf','C10–11／C20']],
+  const legend={fail:[['#fff2cc','1–9'],['#ffe699','10–19'],['#ffd966','20–49'],['#bf8f00','50+'],['#808080','Excluded by Cat.']],
+    wr:[['#fff','Top left: Read'],['#ffd966','Top right: Write'],['#ff6600','Bottom left: Write & Read'],['#fff','Bottom right: No Monitor'],['#00b0f0','All blocks pass']],
+    loss:[['#fff','Left: Fail BLK'],['#ff433c','Right: Loss BLK'],['#00b0f0','All blocks pass']],
+    cat:[['#c6efce','C1–2'],['#bdd7ee','C3–4'],['#f8cbad','C5–8'],['#ff9999','C9'],['#bfbfbf','C10–11 / C20']],
     repair:[['#c6efce','C1–2'],['#f8cbad','C5–8'],['#ff9999','C9']],
-    vmin:[['#f8cbad','有效 Vmin (V)'],['#dbeafe','Pass'],['#e2e8f0','資料／門檻狀態']]};
+    vmin:[['#f8cbad','Valid Vmin (V)'],['#dbeafe','Pass'],['#e2e8f0','Data / threshold status']]};
   renderLegend('map-legend',legend[s.layer]);
   const x0=Math.min(...rows.map(r=>r.x)), x1=Math.max(...rows.map(r=>r.x));
   const y0=Math.min(...rows.map(r=>r.y)), y1=Math.max(...rows.map(r=>r.y));
@@ -319,6 +319,7 @@ async function refreshMap() {
     board.append(chip);
   }
   showChip(rows.find(r=>chipKey(r)===s.selected));
+  showGridVmin();
   fitMapStage();
 }
 $('layer').onchange=safe(()=>{s.layer=$('layer').value;return refreshMap();});
@@ -331,6 +332,29 @@ const patternColor = name => {
   const patterns=s.report.patterns; const i=Math.max(0,patterns.indexOf(name));
   return ['#ffe0aa','#c8d9ef','#cde8ca','#f0ccee','#dddbf5'][i%5];
 };
+function showGridVmin() {
+  const cells=$('blk-grid').children;
+  const worstPatterns=new Map();
+  for(const [index,entry] of s.blocks.entries()) {
+    const tile=cells[index];
+    const label=tile.querySelector('.block-vmin');
+    const normal=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : vfmt(entry.trigger.voltage) : '';
+    const worst=entry.worst_vmin.filter(hit=>hit.wt===s.wt);
+    for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
+    tile.classList.toggle('worst-cell',worst.length>0);
+    label.classList.toggle('worst',worst.length>0);
+    label.textContent=worst.length>1?'S/M':worst.length?vfmt(worst[0].voltage).slice(0,-2):normal;
+    const title=['BLK '+entry.blk,normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
+      ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
+    tile.title=title;
+    tile.setAttribute('aria-label',title);
+  }
+  const summary=$('dist-worst');
+  summary.hidden=!worstPatterns.size;
+  const summaryText=s.report.patterns.filter(pattern=>worstPatterns.has(pattern))
+    .map(pattern=>pattern+' '+vfmt(worstPatterns.get(pattern))).join(' · ');
+  summary.textContent='WT'+s.wt+' · Worst Vmin · '+summaryText;
+}
 async function refreshGrid() {
   const id=++s.gridVersion;
   ++s.detailVersion;
@@ -338,19 +362,17 @@ async function refreshGrid() {
   if(id!==s.gridVersion || s.page!=='maps')return;
   s.blocks=entries;
   const {x,y}=selection();$('dist-title').textContent='256 BLK Distribution · X'+x+' Y'+y;
-  $('dist-wts').textContent='狀態由左至右  '+s.report.wt_numbers.map(wt=>'WT'+wt).join(' / ');
+  $('dist-wts').textContent='Status bands, left to right: '+s.report.wt_numbers.map(wt=>'WT'+wt).join(' / ');
   const board=$('blk-grid');board.replaceChildren();
   renderLegend('dist-legend',[['#00b0f0','Pass'],['#f35b53','Fail'],['#ffb9b4','Hard Fail'],['#d5dee7','No Data'],...s.report.patterns.map(p=>[patternColor(p),p])]);
   for(const entry of entries){
-    const label=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : vfmt(entry.trigger.voltage) : '';
     const btn=el('button',null,'block'+(entry.hard?' hard':entry.states.every(v=>v.status==='Pass')?' clean':''));
-    const title='BLK '+entry.blk+(label?' · '+label:'');
     const phaseSummary=entry.states.map(phase=>'WT'+phase.wt+' '+phase.status);
-    btn.title=[title,...phaseSummary].join(' · ');
-    btn.setAttribute('aria-label',btn.title);
     btn.style.gridRow=entry.blk%16+1;btn.style.gridColumn=Math.floor(entry.blk/16)+1;
     if(entry.trigger&&!entry.hard)btn.style.background=patternColor(entry.trigger.pattern);
-    btn.append(el('span','BLK '+entry.blk,'block-number'),el('small',label,'block-vmin'));
+    const number=el('span',null,'block-number');
+    number.append(el('span','BLK ','block-prefix'),String(entry.blk));
+    btn.append(number,el('small',null,'block-vmin'));
     const bars=el('span',null,'bands');
     bars.setAttribute('aria-hidden','true');
     for(const [index,phase] of entry.states.entries()){
@@ -372,6 +394,7 @@ async function refreshGrid() {
     });
     board.append(btn);
   }
+  showGridVmin();
 }
 function table(headers, rows) {
   const table=el('table'), head=el('thead'), body=el('tbody'), bar=el('tr');
@@ -418,7 +441,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
   }
   add('line',{x1:left,x2:left,y1:top,y2:bottom,class:'chart-axis'});
   add('line',{x1:left,x2:right,y1:bottom,y2:bottom,class:'chart-axis'});
-  add('text',{x:(left+right)/2,y:303,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config 順序');
+  add('text',{x:(left+right)/2,y:303,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config Order');
   return {wrap,add,left,right,bottom,tickY,y};
 }
 function chartMark(chart, tag, attrs, description) {
@@ -427,19 +450,19 @@ function chartMark(chart, tag, attrs, description) {
   return mark;
 }
 function stationLabel(station) {
-  const fbc = station.fbc === null ? 'FBC 無資料' : 'FBC '+nfmt.format(station.fbc);
+  const fbc = station.fbc === null ? 'No FBC data' : 'FBC '+nfmt.format(station.fbc);
   return station.func+' · TNO '+station.tno+' · '+vfmt(station.v)+' · '+fbc;
 }
 function accumulationChart(pattern, stations, result) {
   const article = el('div',null,'chart-content');
   if (['Hard Fail','Prior WT','Prior Pattern','No Data'].includes(result.status)) {
-    const reason = {'Hard Fail':'Hard Fail 排除','Prior WT':'前一個 WT 已失效',
-      'Prior Pattern':'前一個 Pattern 已失效','No Data':'FBC 或前序測試資料不足'};
-    article.append(el('p',reason[result.status]+'，無有效 FBC90% 判定。','tab-note'));
+    const reason = {'Hard Fail':'Excluded by Hard Fail','Prior WT':'Failed at a prior WT',
+      'Prior Pattern':'Failed an earlier pattern','No Data':'Missing FBC or prerequisite data'};
+    article.append(el('p',reason[result.status]+'. FBC90% is unavailable.','tab-note'));
     return article;
   }
-  const info = result.tno === null ? 'All Pass · 峰值 FBC 0' :
-    '首次達 90% · '+vfmt(result.voltage)+' · '+result.func+' · TNO '+result.tno;
+  const info = result.tno === null ? 'All Pass · Peak FBC 0' :
+    'First crossing ≥90% · '+vfmt(result.voltage)+' · '+result.func+' · TNO '+result.tno;
   article.append(el('p',info,'chart-summary'));
   const runs = [];
   for (const [i,station] of stations.entries()) {
@@ -448,7 +471,7 @@ function accumulationChart(pattern, stations, result) {
     else runs.push({voltage:station.v,start:i,end:i});
   }
   const width = Math.max(560,runs.length*66+108,stations.length*15+108);
-  const chart = chartFrame(pattern+' FBC90% 累積曲線','累積比例',100,[0,25,50,75,90,100],width,n=>n+'%');
+  const chart = chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%');
   const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
   for (const run of runs) {
     chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label'},
@@ -473,7 +496,7 @@ function voltageDistribution(pattern, stations) {
     groups.get(row.v).push(row);
   }
   const recorded = stations.filter(row=>row.v!==null&&row.fbc!==null);
-  if (!recorded.length) return el('p','沒有同時具備電壓與 FBC 的站點。','tab-note');
+  if (!recorded.length) return el('p','No stations with both voltage and FBC data.','tab-note');
   const article = el('div',null,'chart-content');
   const funcs = [...new Set(recorded.map(row=>row.func))];
   const palette = ['#204f78','#b86b30','#477958','#8a577b','#657481','#9a8737','#40798b'];
@@ -491,7 +514,7 @@ function voltageDistribution(pattern, stations) {
   const step = Math.ceil(peak/Math.min(4,peak));
   const top = step*Math.ceil(peak/step);
   const compact = new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
-  const chart = chartFrame(pattern+' 不同電壓的 FBC 分布','FBC',top,
+  const chart = chartFrame(pattern+' FBC by Test Voltage','FBC',top,
     Array.from({length:top/step+1},(_,i)=>i*step),width,n=>compact.format(n));
   const stride = (chart.right-chart.left)/groups.size;
   for (const [index,[voltage,rows]] of [...groups].entries()) {
@@ -507,7 +530,7 @@ function voltageDistribution(pattern, stations) {
   }
   article.append(chart.wrap);
   if (recorded.length !== stations.length) {
-    article.append(el('p','缺少電壓或 FBC 的站點留空。','chart-note'));
+    article.append(el('p','Stations with missing voltage or FBC are shown as gaps.','chart-note'));
   }
   return article;
 }
@@ -549,8 +572,8 @@ function patternCharts(details, initialPattern, showTables) {
     const name = selector.value;
     const stations = details.sweep.filter(row=>row.pattern===name);
     charts.replaceChildren(
-      section('Fail Pattern · FBC90% 累積',accumulationChart(name,stations,details.fbc90[name])),
-      section('同 Pattern 電壓分布 · FBC',voltageDistribution(name,stations))
+      section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name])),
+      section('FBC by Test Voltage and Function',voltageDistribution(name,stations))
     );
     showTables(name,stations);
   };
@@ -580,6 +603,12 @@ async function refreshDetail(fromMatrix=false) {
   const {x,y}=selection();
   title.append(el('h2','WT'+s.wt+' · X'+x+' Y'+y+' · BLK '+s.block),el('span',s.report.mode));
   const body=el('div',null,'details-body');
+  if(details.hard_fail_tests.length){
+    const hardFail=section('Hard Fail test items',table(['WT','TNO','Function','Test Voltage','FBC','Fail Cat.'],
+      details.hard_fail_tests.map(test=>['WT'+test.wt,test.tno,test.func,vfmt(test.voltage),test.fbc,test.cat?'C'+test.cat:'—'])),true);
+    hardFail.open=true;
+    body.append(hardFail);
+  }
   const sweepData=el('div');
   const addressData=el('div');
   const sweep=section('Function sweep（Config 順序）',sweepData,true);

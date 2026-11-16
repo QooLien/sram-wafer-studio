@@ -689,10 +689,19 @@ class Wafer:
 
     def grid(self, chip):
         chosen, states = {}, defaultdict(dict)
+        worst = {}
+        tracked = {name for name in self.config.patterns if name.casefold() in ("scan", "march")}
         hard = set(bits(self.eligibility(len(self.phases) - 1, chip)[0]))
         for wt, number in enumerate(self.wt_numbers):
             incomplete = set()
             for pattern, blk, crossing, peak, _ in self.crossings(wt, chip):
+                if pattern in tracked and crossing.voltage is not None:
+                    key = number, pattern
+                    previous = worst.get(key)
+                    if previous is None or crossing.voltage > previous[0]:
+                        worst[key] = crossing.voltage, [blk]
+                    elif crossing.voltage == previous[0]:
+                        previous[1].append(blk)
                 state = states[blk].setdefault(wt, {"status": "No Data", "w": 0, "r": 0})
                 if crossing.status in ("Fail", "No Vmin", "Below") or peak > 0:
                     state["status"] = "Fail"
@@ -722,7 +731,11 @@ class Wafer:
                         state["status"] = "No Data"
                     state["w"] = sum(bool(row["write"]) for row in addresses.values())
                     state["r"] = sum(bool(row["read"]) for row in addresses.values())
-        return [{"blk": b, "trigger": chosen.get(b), "hard": b in hard,
+        worst_by_block = defaultdict(list)
+        for (number, pattern), (voltage, blocks) in worst.items():
+            for blk in blocks:
+                worst_by_block[blk].append({"wt": number, "pattern": pattern, "voltage": voltage})
+        return [{"blk": b, "trigger": chosen.get(b), "hard": b in hard, "worst_vmin": worst_by_block[b],
                  "states": [{"wt": number, **states[b].get(i, {"status": "No Data", "w": 0, "r": 0})}
                             for i, number in enumerate(self.wt_numbers)]} for b in range(BLKS)]
 
@@ -745,7 +758,17 @@ class Wafer:
                 ratio = (cumulative / judge["peak"] if judge["peak"] else 0.0) if valid else None
                 scans.append({"pattern": pattern, "tno": t.tno, "func": t.name, "v": t.voltage,
                               "fbc": fbc, "accumulated": ratio, "state": state[pattern]})
-        return {"sweep": scans, "crossings": diagnostics, "fbc90": fbc90,
+        hard_fail_tests = []
+        for number, phase in zip(self.wt_numbers, self.phases):
+            hard_die = phase.chips.get(chip)
+            if hard_die is None:
+                continue
+            for test in self.config.hard:
+                values = hard_die.fbc.get(test.tno)
+                if values is not None and values[blk] > 0:
+                    hard_fail_tests.append({"wt": number, "tno": test.tno, "func": test.name,
+                                            "voltage": test.voltage, "fbc": values[blk], "cat": test.cat})
+        return {"sweep": scans, "crossings": diagnostics, "fbc90": fbc90, "hard_fail_tests": hard_fail_tests,
                 "coverage": [self.audit_one(wt, name, chip, blk) for name in self.config.patterns
                              if isinstance((mask := self.fail_maps[wt, name, chip]), int) and mask >> blk & 1]}
 
