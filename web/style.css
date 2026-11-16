@@ -114,6 +114,7 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 #data-table:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 #block-detail summary{cursor:pointer;padding:11px 14px;font-weight:650}
 #block-detail summary h3{display:inline;padding:0;margin-left:5px}
+#block-detail details{scroll-margin-top:140px}
 #block-detail details[open] summary{border-bottom:1px solid var(--border)}
 .address-table{--address-key:46px}
 .address-table :is(th,td):not([colspan]):nth-child(-n+7){

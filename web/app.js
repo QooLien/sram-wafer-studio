@@ -364,9 +364,10 @@ async function refreshGrid() {
       board.querySelector('.block.selected')?.classList.remove('selected');
       btn.classList.add('selected');
       put('block-detail');setMapStage('matrix');
-      await refreshDetail();
+      const focusTable=await refreshDetail(true);
       if(s.page==='maps'&&s.mapStage==='matrix'&&s.selected===selected&&s.block===entry.blk&&$('block-detail').hasChildNodes()){
         setMapStage('detail',true);
+        focusTable?.scrollIntoView({block:'start'});
       }
     });
     board.append(btn);
@@ -510,7 +511,7 @@ function voltageDistribution(pattern, stations) {
   }
   return article;
 }
-function patternCharts(details) {
+function patternCharts(details, initialPattern, showTables) {
   const names = Object.keys(details.fbc90);
   const panel = el('section',null,'detail-section pattern-charts');
   const heading = el('div',null,'toolbar');
@@ -518,7 +519,7 @@ function patternCharts(details) {
   const field = el('label','Pattern');
   field.append(selector);
   heading.append(field);
-  options(selector,Object.fromEntries(names.map(name=>[name,name])),s.detailPattern||s.pattern);
+  options(selector,Object.fromEntries(names.map(name=>[name,name])),initialPattern);
   const exportStatus = el('p',null,'pattern-export-status');
   exportStatus.setAttribute('role','status');
   exportStatus.hidden = true;
@@ -551,43 +552,66 @@ function patternCharts(details) {
       section('Fail Pattern · FBC90% 累積',accumulationChart(name,stations,details.fbc90[name])),
       section('同 Pattern 電壓分布 · FBC',voltageDistribution(name,stations))
     );
+    showTables(name,stations);
   };
   selector.onchange = ()=>{s.detailPattern=selector.value;render();};
   render();
   panel.append(heading,exportStatus,charts);
   return panel;
 }
-async function refreshDetail() {
+function preferredMarch(details) {
+  const names=Object.keys(details.fbc90);
+  const scan=names.find(name=>name.toLowerCase()==='scan');
+  const march=names.find(name=>name.toLowerCase()==='march');
+  if(!scan||!march||details.fbc90[scan].status!=='Pass')return null;
+  const result=details.fbc90[march];
+  const endpointFailed=details.coverage.some(row=>row.pattern===march);
+  return endpointFailed||['Fail','No Vmin'].includes(result.status)?march:null;
+}
+async function refreshDetail(fromMatrix=false) {
   if(s.block===null)return;
   const id=++s.detailVersion;
+  const currentPattern=$('block-detail').querySelector('.pattern-charts select')?.value;
   const details=await api(params({view:'detail',...selection(),blk:s.block}));
   if(id!==s.detailVersion||s.page!=='maps')return;
+  const march=fromMatrix?preferredMarch(details):null;
+  const initialPattern=march||currentPattern||s.detailPattern||s.pattern;
   const title=el('div',null,'section-title');
   const {x,y}=selection();
   title.append(el('h2','WT'+s.wt+' · X'+x+' Y'+y+' · BLK '+s.block),el('span',s.report.mode));
   const body=el('div',null,'details-body');
-  if (Object.keys(details.fbc90).length) body.append(patternCharts(details));
+  const sweepData=el('div');
+  const addressData=el('div');
+  const sweep=section('Function sweep（Config 順序）',sweepData,true);
+  const address=section('Fail Address / Monitor 匹配',addressData,true);
+  sweep.open=Boolean(march);
+  const showTables=(pattern,stations)=>{
+    sweepData.replaceChildren(table(['Pattern','TNO','Func.','Test Voltage','FBC','狀態'],
+      stations.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])));
+    const addresses=details.addresses.filter(r=>r.pattern===pattern).map(r=>{
+      const cell=el('td'), btn=el('button','查看地址','quiet');
+      btn.onclick=safe(()=>{
+        $('data-view').value='address';$('filter-chip').checked=true;
+        s.targetAddress=r.address.join(',');s.viewPage=0;return navigate('data');
+      });
+      cell.append(btn);
+      const voltage=el('td',r.function_voltages.map(vfmt).join(', '));
+      voltage.title='Function TNO '+r.function.join(', ');
+      return [r.pattern,...r.address,voltage,r.write,r.read,r.category,cell];
+    });
+    addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses));
+  };
+  if(Object.keys(details.fbc90).length)body.append(patternCharts(details,initialPattern,showTables));
   const block=s.blocks[s.block];
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
   body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC'],
     details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,vfmt(c.voltage),c.peak])),true));
-  body.append(section('Function sweep（Config 順序）',table(['Pattern','TNO','Func.','Test Voltage','FBC','狀態'],
-    details.sweep.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])),true));
-  const addresses=details.addresses.map(r=>{
-    const cell=el('td'), btn=el('button','查看地址','quiet');
-    btn.onclick=safe(()=>{
-      $('data-view').value='address';$('filter-chip').checked=true;
-      s.targetAddress=r.address.join(',');s.viewPage=0;return navigate('data');
-    });
-    cell.append(btn);
-    const voltage=el('td',r.function_voltages.map(vfmt).join(', '));
-    voltage.title='Function TNO '+r.function.join(', ');
-    return [r.pattern,...r.address,voltage,r.write,r.read,r.category,cell];
-  });
-  body.append(section('Fail Address / Monitor 匹配',table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses),true));
+  body.append(sweep,address);
   put('block-detail',title,body);setMapStage(s.mapStage);
+  return march?sweep:null;
 }
+
 function fitDataTable() {
   if (s.page !== 'data' || !s.report) return;
   const viewport=$('data-table');
