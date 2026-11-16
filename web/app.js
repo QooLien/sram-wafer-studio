@@ -697,12 +697,51 @@ async function refreshDetail(fromMatrix=false) {
   return march?sweep:null;
 }
 
+function renderAddressHeader(addressTable) {
+  const columns=el('colgroup');
+  let width=0;
+  for(const [i,heading] of [...addressTable.tHead.rows[0].cells].entries()){
+    heading.scope='col';
+    heading.title=heading.textContent;
+    const size=i<7?46:Math.max(116,Math.min(300,heading.textContent.length*7+22));
+    const column=el('col');
+    column.style.width=size+'px';
+    columns.append(column);
+    width+=size;
+  }
+  const header=el('table',null,'address-table address-head-table');
+  header.style.width=addressTable.style.width=width+'px';
+  header.append(columns.cloneNode(true),addressTable.tHead.cloneNode(true));
+  addressTable.prepend(columns);
+  addressTable.classList.add('address-table','address-body-table');
+  put('address-head',header);
+}
+function syncAddressHeader() {
+  if(!$('address-header').hidden)$('address-head').scrollLeft=$('data-table').scrollLeft;
+}
+$('data-table').addEventListener('scroll',syncAddressHeader,{passive:true});
+$('address-header').addEventListener('wheel',event=>{
+  if(event.ctrlKey)return;
+  const viewport=$('data-table');
+  const line=event.deltaMode===WheelEvent.DOM_DELTA_LINE?32:1;
+  const pages=event.deltaMode===WheelEvent.DOM_DELTA_PAGE;
+  const x=event.deltaX||(event.shiftKey?event.deltaY:0);
+  const y=event.shiftKey&&!event.deltaX?0:event.deltaY;
+  viewport.scrollBy(x*(pages?viewport.clientWidth:line),y*(pages?viewport.clientHeight:line));
+  event.preventDefault();
+},{passive:false});
 function fitDataTable() {
   if (s.page !== 'data' || !s.report) return;
   const viewport=$('data-table');
   const top=viewport.getBoundingClientRect().top+window.scrollY;
   const footer=$('data-results').querySelector('.pagination').offsetHeight;
   viewport.style.maxHeight=Math.max(120,Math.floor(window.innerHeight-top-footer-16))+'px';
+  const header=$('address-header');
+  if(!header.hidden){
+    header.style.setProperty('--address-top',document.querySelector('.top').offsetHeight+'px');
+    $('address-head').style.width=viewport.clientWidth+'px';
+    syncAddressHeader();
+  }
 }
 window.addEventListener('resize',fitDataTable);
 async function refreshTable() {
@@ -715,8 +754,12 @@ async function refreshTable() {
   if(id!==s.versions||s.page!=='data')return;
   s.viewPage=result.page;s.targetAddress=null;
   const rendered=table(result.headers,result.rows);
-  rendered.classList.toggle('address-table',mode==='address');
+  const address=mode==='address';
   const viewport=$('data-table');
+  $('address-header').hidden=!address;
+  viewport.classList.toggle('address-viewport',address);
+  if(address)renderAddressHeader(rendered);
+  else put('address-head');
   put('data-table',rendered);
   viewport.scrollTop=0;
   $('prev').disabled=s.viewPage===0;$('next').disabled=!result.more;
@@ -726,7 +769,7 @@ async function refreshTable() {
     const row=rendered.tBodies[0].rows[result.highlighted];
     row.classList.add('address-match');
     const relativeTop=row.getBoundingClientRect().top-viewport.getBoundingClientRect().top;
-    viewport.scrollTop=relativeTop-rendered.tHead.offsetHeight;
+    viewport.scrollTop=relativeTop-(address?0:rendered.tHead.offsetHeight);
   }
 }
 for(const id of ['data-view','data-wt','data-pattern','filter-chip']) $(id).onchange=safe(()=>{s.viewPage=0;return refreshTable();});
