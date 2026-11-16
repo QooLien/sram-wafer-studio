@@ -17,6 +17,7 @@ BLKS = 256
 ALL = (1 << BLKS) - 1
 MODES = tuple(f"FBC{i}" for i in range(11)) + ("FBC90%",)
 GROUPS = ("Read Fail", "Write Fail", "Write&Read Fail", "No monitor item Fail")
+MATCH_LABELS = ("Read only", "Write only", "Write & Read", "No monitor hit")
 TAG = re.compile(r"\b(TNO|X|Y)\s*=\s*([+-]?\d+)(?=\s|[,;]|$)", re.I)
 META = re.compile(r"\b(LOT|WNO|STEP|Program)[ \t]*=[ \t]*", re.I)
 FBC = re.compile(r"\bFBC\s+BY\s+BLK\s*=\s*", re.I)
@@ -439,6 +440,16 @@ def observed_category(write, read):
     return GROUPS[0] if read else GROUPS[3]
 
 
+def match_counts_by_voltage(scope, matches):
+    """Count each captured Function address once per voltage in its exclusive category."""
+    counts = {test.voltage: [0] * len(GROUPS) for test in scope if test.voltage is not None}
+    for row in matches:
+        category = GROUPS.index(row["category"])
+        for voltage in row["function_voltages"]:
+            counts.setdefault(voltage, [0] * len(GROUPS))[category] += 1
+    return [{"voltage": voltage, "counts": values} for voltage, values in counts.items()]
+
+
 def phase_numbers(sources):
     """Resolve labels in STEP order when a filename lacks an explicit WT."""
     labels = tuple(source.source_wt for source in sources)
@@ -552,6 +563,10 @@ class Wafer:
             r = sorted(t for t in hits if sides.get(t) == "R")
             yield {"address": addr, "function": func, "write": w, "read": r,
                    "category": observed_category(w, r)}
+
+    def pattern_matches(self, wt, chip, blk, scope):
+        for row in self.address_info(wt, chip, blk, scope):
+            yield row | {"function_voltages": self.config.voltages_for(row["function"])}
 
     @cached_property
     def order(self):

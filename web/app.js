@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const chipKey = row => row.x + ',' + row.y;
@@ -138,7 +138,7 @@ for (const button of document.querySelectorAll('[data-stage]')) {
 }
 function setReport(report) {
   s.report = report; s.wt = report.wt_numbers[0]; s.selected = null; s.block = null; s.blocks = []; s.viewPage = 0;
-  s.pattern = report.patterns[0] || ''; s.detailPattern = null;
+  s.pattern = report.patterns[0] || ''; s.detailPattern = null; s.detailChart = 'fbc';
   s.layer = report.source_mode === 'address' ? 'cat' : 'fail';
   const pats = Object.fromEntries(report.patterns.map(p=>[p,p]));
   options($('pattern'),pats,s.pattern);
@@ -343,7 +343,7 @@ function showGridVmin() {
     for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
     tile.classList.toggle('worst-cell',worst.length>0);
     label.classList.toggle('worst',worst.length>0);
-    const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).slice(0,-2)))];
+    const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).replace(/ V$/, 'v')))];
     label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
     const title=['BLK '+entry.blk,normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
       ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
@@ -417,11 +417,11 @@ function section(title, node, collapsible=false) {
   } else block.append(caption,sc);
   return block;
 }
-function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
+function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318) {
   const wrap = el('div', null, 'plot');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 '+width+' 318');
+  svg.setAttribute('viewBox', '0 0 '+width+' '+height);
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', label);
   svg.style.minWidth = Math.max(500,width-30)+'px';
@@ -433,7 +433,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - 35, bottom = 244, top = 43, tickY = 270;
+  const left = 80, right = width - 35, bottom = height - 74, top = 43, tickY = height - 48;
   const y = value => bottom - value / maximum * (bottom-top);
   add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
@@ -442,7 +442,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel) {
   }
   add('line',{x1:left,x2:left,y1:top,y2:bottom,class:'chart-axis'});
   add('line',{x1:left,x2:right,y1:bottom,y2:bottom,class:'chart-axis'});
-  add('text',{x:(left+right)/2,y:303,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config Order');
+  add('text',{x:(left+right)/2,y:height-15,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config Order');
   return {wrap,add,left,right,bottom,tickY,y};
 }
 function chartMark(chart, tag, attrs, description) {
@@ -489,6 +489,22 @@ function accumulationChart(pattern, stations, result) {
   article.append(chart.wrap);
   return article;
 }
+function countChart(label, unit, peak, width, height) {
+  const ceiling=Math.max(1,peak);
+  const step=Math.ceil(ceiling/Math.min(4,ceiling));
+  const top=step*Math.ceil(ceiling/step);
+  const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
+  return chartFrame(label,unit,top,Array.from({length:top/step+1},(_,i)=>i*step),width,n=>compact.format(n),height);
+}
+function chartLegend(labels, colors) {
+  const legend = el('div',null,'legend chart-legend');
+  for (const [index,label] of labels.entries()) {
+    const item=el('span'), swatch=el('i');
+    swatch.style.backgroundColor=colors[index];
+    item.append(swatch,label);legend.append(item);
+  }
+  return legend;
+}
 function voltageDistribution(pattern, stations) {
   const groups = new Map();
   for (const row of stations) {
@@ -502,21 +518,11 @@ function voltageDistribution(pattern, stations) {
   const funcs = [...new Set(recorded.map(row=>row.func))];
   const palette = ['#204f78','#b86b30','#477958','#8a577b','#657481','#9a8737','#40798b'];
   const colors = new Map(funcs.map((func,i)=>[func,palette[i%palette.length]]));
-  const legend = el('div',null,'legend chart-legend');
-  for (const [func,color] of colors) {
-    const item = el('span'), swatch = el('i');
-    swatch.style.backgroundColor = color;
-    item.append(swatch,func);legend.append(item);
-  }
-  article.append(legend);
+  article.append(chartLegend(funcs,[...colors.values()]));
   const groupWidth = Math.max(65,...[...groups.values()].map(rows=>rows.length*15+14));
   const width = Math.max(560,groups.size*groupWidth+108);
-  const peak = Math.max(1,...recorded.map(row=>row.fbc));
-  const step = Math.ceil(peak/Math.min(4,peak));
-  const top = step*Math.ceil(peak/step);
-  const compact = new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
-  const chart = chartFrame(pattern+' FBC by Test Voltage','FBC',top,
-    Array.from({length:top/step+1},(_,i)=>i*step),width,n=>compact.format(n));
+  const peak = Math.max(...recorded.map(row=>row.fbc));
+  const chart = countChart(pattern+' FBC by Test Voltage','FBC',peak,width);
   const stride = (chart.right-chart.left)/groups.size;
   for (const [index,[voltage,rows]] of [...groups].entries()) {
     const mid = chart.left + (index+.5)*stride;
@@ -535,6 +541,40 @@ function voltageDistribution(pattern, stations) {
   }
   return article;
 }
+function wrMatchDistribution(pattern, groups, labels) {
+  const article=el('div',null,'chart-content');
+  const colors=['#35638a','#ce8653','#725b83','#d7dce3'];
+  article.append(chartLegend(labels,colors));
+  if (!groups.length) {
+    article.append(el('p','No Function fail addresses were captured.','tab-note'));
+    return article;
+  }
+  const totals=groups.map(row=>row.counts.reduce((a,b)=>a+b,0));
+  const chart=countChart(pattern+' W/R Match by Test Voltage','Captured Address Count',
+    Math.max(...totals),Math.max(560,groups.length*66+108),275);
+  const stride=(chart.right-chart.left)/groups.length;
+  const barWidth=Math.min(45,stride*.55);
+  for (const [index,row] of groups.entries()) {
+    const mid=chart.left+(index+.5)*stride;
+    const voltage=row.voltage===null?'Unspecified':vfmt(row.voltage);
+    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},
+      row.voltage===null?voltage:voltage.slice(0,-2));
+    let base=0;
+    for (const [category,count] of row.counts.entries()) {
+      if(!count)continue;
+      const end=base+count;
+      chartMark(chart,'rect',{x:mid-barWidth/2,y:chart.y(end),width:barWidth,height:chart.y(base)-chart.y(end),
+        class:'chart-bar',fill:colors[category]},
+        voltage+' · '+labels[category]+' · '+nfmt.format(count)+' of '+nfmt.format(totals[index])+' captured addresses');
+      base=end;
+    }
+    if(base)chart.add('text',{x:mid,y:chart.y(base)-6,'text-anchor':'middle',class:'chart-label'},nfmt.format(base));
+  }
+  article.append(chart.wrap,el('p',totals.some(Boolean)
+    ?'Unique Function fail addresses per voltage. Only captured addresses are included.'
+    :'No Function fail addresses were captured.','chart-note'));
+  return article;
+}
 function patternCharts(details, initialPattern, showTables) {
   const names = Object.keys(details.fbc90);
   const panel = el('section',null,'detail-section pattern-charts');
@@ -544,6 +584,16 @@ function patternCharts(details, initialPattern, showTables) {
   field.append(selector);
   heading.append(field);
   options(selector,Object.fromEntries(names.map(name=>[name,name])),initialPattern);
+  const chartModes=el('div',null,'chips');
+  chartModes.setAttribute('role','group');
+  chartModes.setAttribute('aria-label','Voltage chart type');
+  const modes=[['fbc','FBC'],['match','W/R Match']];
+  for(const [mode,text] of modes){
+    const button=el('button',text);
+    button.onclick=()=>{s.detailChart=mode;render(false);};
+    chartModes.append(button);
+  }
+  heading.append(chartModes);
   const exportStatus = el('p',null,'pattern-export-status');
   exportStatus.setAttribute('role','status');
   exportStatus.hidden = true;
@@ -569,14 +619,19 @@ function patternCharts(details, initialPattern, showTables) {
   }
   heading.append(actions);
   const charts = el('div',null,'chart-pair');
-  const render = () => {
+  const render = (updateTables=true) => {
     const name = selector.value;
     const stations = details.sweep.filter(row=>row.pattern===name);
-    charts.replaceChildren(
-      section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name])),
-      section('FBC by Test Voltage and Function',voltageDistribution(name,stations))
-    );
-    showTables(name,stations);
+    for(const [index,[mode]] of modes.entries()) {
+      const button=chartModes.children[index];
+      button.classList.toggle('active',s.detailChart===mode);
+      button.setAttribute('aria-pressed',s.detailChart===mode);
+    }
+    const voltageChart=s.detailChart==='match'
+      ? section('W/R Match by Test Voltage',wrMatchDistribution(name,details.wr_matches.patterns[name],details.wr_matches.labels))
+      : section('FBC by Test Voltage and Function',voltageDistribution(name,stations));
+    charts.replaceChildren(section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name])),voltageChart);
+    if(updateTables)showTables(name,stations);
   };
   selector.onchange = ()=>{s.detailPattern=selector.value;render();};
   render();

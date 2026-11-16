@@ -10,7 +10,7 @@ from threading import Lock, Thread
 import json
 import sys
 
-from engine import Config, MODES, csv_config, identity, load_wafer
+from engine import Config, MATCH_LABELS, MODES, csv_config, identity, load_wafer, match_counts_by_voltage
 from workbook_settings import workbook_config
 from workbook_results import read_existing
 from exports import AUDIT_COLUMNS, MAPS, VMIN_COLUMNS, batch_name, compare_order, save_report, test_headers
@@ -169,10 +169,11 @@ def view(wafer, query):
             raise ValueError("BLK 必須在 0～255。")
         detail = wafer.detail(wt, chip, blk)
         detail["addresses"] = []
+        detail["wr_matches"] = {"labels": MATCH_LABELS, "patterns": {}}
         for name, scope in wafer.config.patterns.items():
-            for row in wafer.address_info(wt, chip, blk, scope):
-                detail["addresses"].append(row | {"pattern": name,
-                                                "function_voltages": wafer.config.voltages_for(row["function"])})
+            matches = list(wafer.pattern_matches(wt, chip, blk, scope))
+            detail["addresses"].extend(row | {"pattern": name} for row in matches)
+            detail["wr_matches"]["patterns"][name] = match_counts_by_voltage(scope, matches)
         return detail
     if kind == "audit":
         headers = list(AUDIT_COLUMNS.values())

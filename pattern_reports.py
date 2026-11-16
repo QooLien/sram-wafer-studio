@@ -7,7 +7,7 @@ from itertools import groupby
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from engine import voltage_text
+from engine import MATCH_LABELS, match_counts_by_voltage, voltage_text
 from exports import output_path
 
 CURVE = "#204f78"
@@ -17,6 +17,7 @@ GRID = "#dde2e7"
 PALETTE = ("#204f78", "#b86b30", "#477958", "#8a577b", "#657481", "#9a8737", "#40798b")
 HATCHES = ("", "//", "..", "xx", "\\\\", "++", "oo")
 
+MATCH_COLORS = ("#35638a", "#ce8653", "#725b83", "#d7dce3")
 
 def voltage_units(value):
     return "Unspecified" if value is None else f"{voltage_text(value)} V"
@@ -30,7 +31,7 @@ def judge_summary(judge):
     return "FBC90% unavailable  |  " + judge["status"]
 
 
-def write_figures(pdf, png, title, stations, judge):
+def write_figures(pdf, png, title, stations, judge, wr_matches):
     from matplotlib import rc_context
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
@@ -46,18 +47,18 @@ def write_figures(pdf, png, title, stations, judge):
             groups[row["v"]].append(row)
     series = dict.fromkeys(row["func"] for row in stations if row["fbc"] is not None and row["v"] is not None)
     styles = {name: (PALETTE[i % len(PALETTE)], HATCHES[i % len(HATCHES)]) for i, name in enumerate(series)}
-    width = min(22, max(10, 0.76 * max(len(runs), len(groups)) + 2.5))
+    width = min(22, max(10, 0.76 * max(len(runs), len(groups), len(wr_matches)) + 2.5))
     with rc_context({
         "font.family": "serif", "font.serif": ["STIXGeneral", "Microsoft JhengHei", "DejaVu Serif"],
         "font.size": 14, "mathtext.fontset": "stix", "pdf.fonttype": 42, "text.parse_math": False,
         "axes.labelcolor": INK, "xtick.color": INK, "ytick.color": INK, "text.color": INK,
     }):
-        fig = Figure(figsize=(width, 8.7), layout="constrained", facecolor="white")
+        fig = Figure(figsize=(width, 12.3), layout="constrained", facecolor="white")
         FigureCanvasAgg(fig)
         fig.get_layout_engine().set(w_pad=0.17, h_pad=0.13, hspace=0.07)
         fig.suptitle(title, fontsize=21, weight="bold")
-        curve, bars = fig.subplots(2, 1)
-        for axis in (curve, bars):
+        curve, bars, match_plot = fig.subplots(3, 1)
+        for axis in (curve, bars, match_plot):
             axis.spines[["top", "right"]].set_visible(False)
             axis.spines[["bottom", "left"]].set_color(INK)
             axis.set_axisbelow(True)
@@ -89,6 +90,8 @@ def write_figures(pdf, png, title, stations, judge):
         bars.set_title("(b)  FBC by test voltage and function", loc="left", fontsize=17, pad=12)
         bars.set_ylabel("Fail bit count (FBC)", fontsize=16)
         labels = list(groups)
+        voltage_slots = max(1, len(labels), len(wr_matches))
+        bars.set_xlim(-0.55, voltage_slots - 0.45)
         bars.set_xticks(range(len(labels)), [voltage_units(v) for v in labels],
                         rotation=35 if len(labels) > 15 else 0)
         recorded = [row["fbc"] for values in groups.values() for row in values if row["fbc"] is not None]
@@ -119,11 +122,36 @@ def write_figures(pdf, png, title, stations, judge):
         else:
             bars.text(0.5, 0.5, "No test voltage with measured FBC", transform=bars.transAxes,
                       ha="center", va="center", color="#555e69", fontsize=15)
+        match_plot.set_title("(c)  W/R match by test voltage", loc="left", fontsize=17, pad=29)
+        match_plot.set_ylabel("Captured address count", fontsize=16)
+        match_plot.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=5))
+        match_plot.set_xlim(-0.55, voltage_slots - 0.45)
+        match_plot.set_xticks(range(len(wr_matches)), [voltage_units(row["voltage"]) for row in wr_matches],
+                             rotation=35 if len(wr_matches) > 15 else 0)
+        matched_totals = [sum(row["counts"]) for row in wr_matches]
+        match_plot.set_ylim(0, max(1, 1.16 * max(matched_totals, default=0)))
+        if any(matched_totals):
+            bottom = [0] * len(wr_matches)
+            for index, (label, color, hatch) in enumerate(zip(MATCH_LABELS, MATCH_COLORS, HATCHES)):
+                values = [row["counts"][index] for row in wr_matches]
+                bars_at_voltage = match_plot.bar(range(len(wr_matches)), values, bottom=bottom, width=0.55,
+                    color=color, hatch=hatch, edgecolor=INK, linewidth=0.55, label=label)
+                bottom = [base + height for base, height in zip(bottom, values)]
+            if len(wr_matches) <= 18:
+                match_plot.bar_label(bars_at_voltage, labels=[f"{total:,}" if total else "" for total in matched_totals],
+                                     padding=3, fontsize=12)
+            match_plot.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncols=len(MATCH_LABELS),
+                              frameon=False, fontsize=12, borderaxespad=0)
+        else:
+            match_plot.text(0.5, 0.5, "No Function fail addresses were captured", transform=match_plot.transAxes,
+                            ha="center", va="center", color="#555e69", fontsize=15)
+        match_plot.set_xlabel("Test voltage (config order)\nUnique captured Function fail addresses per voltage.",
+                              fontsize=14, labelpad=8)
         fig.savefig(pdf, metadata={"Title": title})
         fig.savefig(png, dpi=300)
 
 
-def write_workbook(path, title, stations, judge, matches):
+def write_workbook(path, title, stations, judge, matches, wr_matches):
     from xlsxwriter import Workbook
 
     with Workbook(path, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
@@ -172,26 +200,33 @@ def write_workbook(path, title, stations, judge, matches):
                                     "Write TNO", "Read TNO", "Classification"), header)
         last_address = 0
         for last_address, match in enumerate(matches, 1):
-            addresses.write_row(last_address, 0, (*match["address"], ", ".join(map(voltage_text, match["voltages"])),
+            addresses.write_row(last_address, 0, (*match["address"], ", ".join(map(voltage_text, match["function_voltages"])),
                 *(", ".join(map(str, match[key])) for key in ("function", "write", "read")), match["category"]))
         addresses.freeze_panes(1, 4)
         addresses.autofilter(0, 0, last_address, 8)
+        addresses.set_column("K:K", 16, volts)
+        addresses.set_column("L:P", 21, basic)
+        addresses.write_row(0, 10, ("Voltage (V)", *MATCH_LABELS, "Total Captured"), header)
+        for idx, row in enumerate(wr_matches, 1):
+            voltage = row["voltage"] if row["voltage"] is not None else "Unspecified"
+            addresses.write_row(idx, 10, (voltage, *row["counts"], sum(row["counts"])))
 
         figures.set_column("A:Q", 12, basic)
         figures.set_row(0, 36)
         figures.merge_range("A1:Q1", title, title_fmt)
         figures.merge_range("A2:Q2", judge_summary(judge), basic)
         figures.merge_range("A3:Q3", "Accumulation uses the maximum FBC observed through each station, divided by the sweep peak.", basic)
+        figures.merge_range("A4:Q4", "W/R counts each captured Function fail address once per voltage.", basic)
         font = {"name": "Cambria", "size": 13, "color": INK}
         axis_title = font | {"size": 15, "bold": True}
         last = len(stations)
         categories = ["Sweep Data", 1, 1, last, 1]
 
-        def base_chart(kind, caption, units, maximum=None, fmt=None):
+        def base_chart(kind, caption, units, maximum=None, fmt=None, *, x_title="Test voltage / TNO (config order)", count=None):
             chart = book.add_chart({"type": kind, **({"subtype": "stacked"} if kind == "column" else {})})
             chart.set_title({"name": caption, "name_font": font | {"size": 19, "bold": True}})
-            chart.set_size({"width": max(1000, min(last * 47 + 145, 2800)), "height": 460})
-            chart.set_x_axis({"name": "Test voltage / TNO (config order)", "name_font": axis_title,
+            chart.set_size({"width": max(1000, min((count if count is not None else last) * 47 + 145, 2800)), "height": 460})
+            chart.set_x_axis({"name": x_title, "name_font": axis_title,
                               "num_font": font | {"rotation": -45}, "line": {"color": INK}})
             chart.set_y_axis({"name": units, "name_font": axis_title, "num_font": font, "min": 0,
                               "major_gridlines": {"visible": True, "line": {"color": GRID}},
@@ -200,7 +235,7 @@ def write_workbook(path, title, stations, judge, matches):
             chart.show_blanks_as("gap")
             return chart
 
-        start_bars = "A6"
+        chart_row = 5
         if any(row["accumulated"] is not None for row in stations):
             chart = base_chart("line", "(a) FBC90% accumulation", "Cumulative FBC (%)", 1, "0%")
             chart.add_series({"name": "Accumulated FBC", "categories": categories,
@@ -215,8 +250,8 @@ def write_workbook(path, title, stations, judge, matches):
                                   "values": ["Sweep Data", 1, 9, last, 9], "line": {"none": True},
                                   "marker": {"type": "diamond", "size": 8, "fill": {"color": THRESHOLD},
                                              "border": {"color": THRESHOLD}}})
-            figures.insert_chart("A6", chart)
-            start_bars = "A30"
+            figures.insert_chart(chart_row, 0, chart)
+            chart_row += 24
 
         plotted = {row["func"] for row in stations if row["fbc"] is not None and row["v"] is not None}
         if plotted:
@@ -227,9 +262,23 @@ def write_workbook(path, title, stations, judge, matches):
                                       "values": ["Sweep Data", 1, 10 + i, last, 10 + i],
                                       "fill": {"color": PALETTE[i % len(PALETTE)]},
                                       "border": {"color": INK, "width": 0.5}})
-            figures.insert_chart(start_bars, chart)
+            figures.insert_chart(chart_row, 0, chart)
+            chart_row += 24
         else:
-            figures.write(start_bars, "No test voltage with measured FBC.", basic)
+            figures.write(chart_row, 0, "No test voltage with measured FBC.", basic)
+            chart_row += 2
+
+        if wr_matches:
+            chart = base_chart("column", "(c) W/R match by test voltage", "Captured address count",
+                               x_title="Test voltage (V) · Config order", count=len(wr_matches))
+            for index, (label, color) in enumerate(zip(MATCH_LABELS, MATCH_COLORS)):
+                chart.add_series({"name": label,
+                                  "categories": ["Fail Address Match", 1, 10, len(wr_matches), 10],
+                                  "values": ["Fail Address Match", 1, 11 + index, len(wr_matches), 11 + index],
+                                  "fill": {"color": color}, "border": {"color": INK, "width": 0.5}})
+            figures.insert_chart(chart_row, 0, chart)
+        else:
+            figures.write(chart_row, 0, "No Function fail addresses were captured.", basic)
 
 
 def save_pattern_report(wafer, folder, wt, chip, blk, pattern, kind):
@@ -242,17 +291,18 @@ def save_pattern_report(wafer, folder, wt, chip, blk, pattern, kind):
     info = wafer.detail(wt, chip, blk)
     stations = [row for row in info["sweep"] if row["pattern"] == pattern]
     judge = info["fbc90"][pattern]
+    pattern_scope = wafer.config.patterns[pattern]
+    matches = list(wafer.pattern_matches(wt, chip, blk, pattern_scope))
+    wr_matches = match_counts_by_voltage(pattern_scope, matches)
     folder = Path(folder) / f"Analysis_{date.today():%Y%m%d}"
     folder.mkdir(parents=True, exist_ok=True)
     extensions = ("pdf", "png") if kind == "charts" else ("xlsx",)
     with TemporaryDirectory(dir=folder, prefix=".sram-") as temp:
         staged = [Path(temp) / f"pattern.{ext}" for ext in extensions]
         if kind == "charts":
-            write_figures(*staged, title, stations, judge)
+            write_figures(*staged, title, stations, judge, wr_matches)
         else:
-            matches = (row | {"voltages": wafer.config.voltages_for(row["function"])}
-                       for row in wafer.address_info(wt, chip, blk, wafer.config.patterns[pattern]))
-            write_workbook(staged[0], title, stations, judge, matches)
+            write_workbook(staged[0], title, stations, judge, matches, wr_matches)
         results = []
         try:
             for file, ext in zip(staged, extensions):
