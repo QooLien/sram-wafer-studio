@@ -1,0 +1,1100 @@
+{
+  "full": {
+    "mode": "FBC0",
+    "rows": [
+      {
+        "group": "Monitor",
+        "tno": 350,
+        "name": "W-Low pBL",
+        "voltage": 1.2,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 351,
+        "name": "W-Low pBL",
+        "voltage": 1.035,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 352,
+        "name": "W-Low pBL",
+        "voltage": 0.99,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 353,
+        "name": "W-Low pBL",
+        "voltage": 0.9,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 354,
+        "name": "W-Low pBL",
+        "voltage": 0.81,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 355,
+        "name": "W-Low pBL",
+        "voltage": 0.765,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 356,
+        "name": "W-Low pBL",
+        "voltage": 0.72,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 357,
+        "name": "W-Low pBL",
+        "voltage": 0.68,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 358,
+        "name": "W-Low pBL",
+        "voltage": 0.64,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 359,
+        "name": "W-Low pBL",
+        "voltage": 0.6,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 360,
+        "name": "W-Low pBL",
+        "voltage": 0.56,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 370,
+        "name": "R-Low pBL",
+        "voltage": 1.2,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 371,
+        "name": "R-Low pBL",
+        "voltage": 1.035,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 372,
+        "name": "R-Low pBL",
+        "voltage": 0.99,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 373,
+        "name": "R-Low pBL",
+        "voltage": 0.9,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 374,
+        "name": "R-Low pBL",
+        "voltage": 0.81,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 375,
+        "name": "R-Low pBL",
+        "voltage": 0.765,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 376,
+        "name": "R-Low pBL",
+        "voltage": 0.72,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 377,
+        "name": "R-Low pBL",
+        "voltage": 0.68,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 378,
+        "name": "R-Low pBL",
+        "voltage": 0.64,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 379,
+        "name": "R-Low pBL",
+        "voltage": 0.6,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 380,
+        "name": "R-Low pBL",
+        "voltage": 0.56,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 500,
+        "name": "Scan0",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 501,
+        "name": "Scan1",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 502,
+        "name": "Scan4N",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": "Hard Fail"
+      },
+      {
+        "group": "Function",
+        "tno": 503,
+        "name": "Scan0",
+        "voltage": 1.035,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 504,
+        "name": "Scan1",
+        "voltage": 1.035,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 505,
+        "name": "Scan4N",
+        "voltage": 1.035,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 520,
+        "name": "Scan0",
+        "voltage": 0.99,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 521,
+        "name": "Scan1",
+        "voltage": 0.99,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 522,
+        "name": "Scan4N",
+        "voltage": 0.99,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 540,
+        "name": "Scan0",
+        "voltage": 0.9,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 541,
+        "name": "Scan1",
+        "voltage": 0.9,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 542,
+        "name": "Scan4N",
+        "voltage": 0.9,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 560,
+        "name": "Scan0",
+        "voltage": 0.81,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 561,
+        "name": "Scan1",
+        "voltage": 0.81,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 562,
+        "name": "Scan4N",
+        "voltage": 0.81,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 570,
+        "name": "Scan0",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 571,
+        "name": "Scan1",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 572,
+        "name": "Scan4N",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 598,
+        "name": "Retention",
+        "voltage": 0.59,
+        "cat": 19,
+        "stop": "Scan"
+      },
+      {
+        "group": "Function",
+        "tno": 706,
+        "name": "March7N",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 709,
+        "name": "March6N",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 710,
+        "name": "March10N_#0000",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 711,
+        "name": "March10N_#55AA",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 707,
+        "name": "Decoder Check",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 708,
+        "name": "Walking Bit",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 723,
+        "name": "March7N",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 726,
+        "name": "March6N",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 727,
+        "name": "March10N_#0000",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 728,
+        "name": "March10N_#55AA",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 724,
+        "name": "Decoder Check",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 725,
+        "name": "Walking Bit",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 743,
+        "name": "March7N",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 746,
+        "name": "March6N",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 747,
+        "name": "March10N_#0000",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 748,
+        "name": "March10N_#55AA",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 744,
+        "name": "Decoder Check",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 745,
+        "name": "Walking Bit",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 763,
+        "name": "March7N",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 766,
+        "name": "March6N",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 767,
+        "name": "March10N_#0000",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 768,
+        "name": "March10N_#55AA",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 764,
+        "name": "Decoder Check",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 765,
+        "name": "Walking Bit",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 773,
+        "name": "March7N",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 776,
+        "name": "March6N",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 777,
+        "name": "March10N_#0000",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 778,
+        "name": "March10N_#55AA",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 774,
+        "name": "Decoder Check",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 775,
+        "name": "Walking Bit",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 783,
+        "name": "March7N",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 786,
+        "name": "March6N",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 787,
+        "name": "March10N_#0000",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 788,
+        "name": "March10N_#55AA",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 784,
+        "name": "Decoder Check",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 785,
+        "name": "Walking Bit",
+        "voltage": 1.26,
+        "cat": 18,
+        "stop": "March"
+      }
+    ]
+  },
+  "batch": {
+    "mode": "FBC0",
+    "rows": [
+      {
+        "group": "Monitor",
+        "tno": 350,
+        "name": "W-Low pBL",
+        "voltage": 1.2,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 351,
+        "name": "W-Low pBL",
+        "voltage": 1.035,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 352,
+        "name": "W-Low pBL",
+        "voltage": 0.99,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 353,
+        "name": "W-Low pBL",
+        "voltage": 0.9,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 354,
+        "name": "W-Low pBL",
+        "voltage": 0.81,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 355,
+        "name": "W-Low pBL",
+        "voltage": 0.765,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 356,
+        "name": "W-Low pBL",
+        "voltage": 0.72,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 357,
+        "name": "W-Low pBL",
+        "voltage": 0.68,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 358,
+        "name": "W-Low pBL",
+        "voltage": 0.64,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 359,
+        "name": "W-Low pBL",
+        "voltage": 0.6,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 360,
+        "name": "W-Low pBL",
+        "voltage": 0.56,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 370,
+        "name": "R-Low pBL",
+        "voltage": 1.2,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 371,
+        "name": "R-Low pBL",
+        "voltage": 1.035,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 372,
+        "name": "R-Low pBL",
+        "voltage": 0.99,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 373,
+        "name": "R-Low pBL",
+        "voltage": 0.9,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 374,
+        "name": "R-Low pBL",
+        "voltage": 0.81,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 375,
+        "name": "R-Low pBL",
+        "voltage": 0.765,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 376,
+        "name": "R-Low pBL",
+        "voltage": 0.72,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 377,
+        "name": "R-Low pBL",
+        "voltage": 0.68,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 378,
+        "name": "R-Low pBL",
+        "voltage": 0.64,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 379,
+        "name": "R-Low pBL",
+        "voltage": 0.6,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Monitor",
+        "tno": 380,
+        "name": "R-Low pBL",
+        "voltage": 0.56,
+        "cat": null,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 500,
+        "name": "Scan0",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 501,
+        "name": "Scan1",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 502,
+        "name": "Scan4N",
+        "voltage": 1.2,
+        "cat": 9,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 503,
+        "name": "Scan0",
+        "voltage": 1.035,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 504,
+        "name": "Scan1",
+        "voltage": 1.035,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 505,
+        "name": "Scan4N",
+        "voltage": 1.035,
+        "cat": 8,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 506,
+        "name": "Scan0",
+        "voltage": 0.99,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 507,
+        "name": "Scan1",
+        "voltage": 0.99,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 508,
+        "name": "Scan4N",
+        "voltage": 0.99,
+        "cat": 7,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 509,
+        "name": "Scan0",
+        "voltage": 0.9,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 510,
+        "name": "Scan1",
+        "voltage": 0.9,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 511,
+        "name": "Scan4N",
+        "voltage": 0.9,
+        "cat": 6,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 512,
+        "name": "Scan0",
+        "voltage": 0.81,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 513,
+        "name": "Scan1",
+        "voltage": 0.81,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 514,
+        "name": "Scan4N",
+        "voltage": 0.81,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 515,
+        "name": "Scan0",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 516,
+        "name": "Scan1",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 517,
+        "name": "Scan4N",
+        "voltage": 0.765,
+        "cat": 5,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 530,
+        "name": "Retention",
+        "voltage": 1.2,
+        "cat": 19,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 700,
+        "name": "March4N",
+        "voltage": 1.2,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 701,
+        "name": "March7N",
+        "voltage": 1.2,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 702,
+        "name": "March10N",
+        "voltage": 1.2,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 703,
+        "name": "March4N",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 704,
+        "name": "March7N",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 705,
+        "name": "March10N",
+        "voltage": 1.035,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 706,
+        "name": "March4N",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 707,
+        "name": "March7N",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 708,
+        "name": "March10N",
+        "voltage": 0.99,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 709,
+        "name": "March4N",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 710,
+        "name": "March7N",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 711,
+        "name": "March10N",
+        "voltage": 0.9,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 712,
+        "name": "March4N",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 713,
+        "name": "March7N",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 714,
+        "name": "March10N",
+        "voltage": 0.81,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 715,
+        "name": "March4N",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 716,
+        "name": "March7N",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      },
+      {
+        "group": "Function",
+        "tno": 717,
+        "name": "March10N",
+        "voltage": 0.765,
+        "cat": 18,
+        "stop": ""
+      }
+    ]
+  }
+}

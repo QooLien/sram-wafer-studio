@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+settings.local.json
+settings.local.tmp
+Address_*/
+*.asc
+!examples/sim128/SIM128_WT[123].asc
+*.xlsx
+*.xlsm
+*.pptx
