@@ -343,7 +343,8 @@ function showGridVmin() {
     for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
     tile.classList.toggle('worst-cell',worst.length>0);
     label.classList.toggle('worst',worst.length>0);
-    label.textContent=worst.length>1?'S/M':worst.length?vfmt(worst[0].voltage).slice(0,-2):normal;
+    const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).slice(0,-2)))];
+    label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
     const title=['BLK '+entry.blk,normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
       ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
     tile.title=title;
