@@ -1,21 +1,14 @@
 
-"""Local-only launcher and HTTP interface for SRAM Wafer Studio."""
+"""Desktop window and local data operations for SRAM Wafer Studio."""
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from itertools import islice
 from pathlib import Path
-from secrets import token_urlsafe
 from threading import Lock, Thread
-from urllib.parse import parse_qs, urlparse
-import argparse
 import json
-import os
-import subprocess
 import sys
-import webbrowser
 
 from engine import Config, MODES, csv_config, identity, load_wafer
 from workbook_settings import workbook_config
@@ -26,7 +19,6 @@ HERE = Path(__file__).resolve().parent
 DEMO = HERE / "examples" / "sim128"
 SETTINGS = HERE / "defaults.json"
 PROFILES = HERE / "settings.local.json"
-TOKEN = token_urlsafe(24)
 LOCK = Lock()
 STATE = {"working": False, "message": "", "error": "", "output": [], "warnings": [], "wafer": None}
 
@@ -44,28 +36,6 @@ def save_settings(key, config):
     tmp = PROFILES.with_suffix(".tmp")
     tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(PROFILES)
-
-
-def choose_files(kind):
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    try:
-        if kind == "asc":
-            return list(filedialog.askopenfilenames(parent=root, title="選取 ASC Raw Data",
-                                                   filetypes=[("ASC Raw Data", "*.asc")]))
-        if kind in ("settings", "report"):
-            title = "匯入測試設定" if kind == "settings" else "開啟既有分析結果"
-            pattern = "*.xlsx *.xlsm *.csv" if kind == "settings" else "*.xlsx *.xlsm"
-            path = filedialog.askopenfilename(parent=root, title=title, filetypes=[("Excel／CSV", pattern)])
-            return [path] if path else []
-        path = filedialog.askdirectory(parent=root, title="選擇匯出資料夾", mustexist=True)
-        return [path] if path else []
-    finally:
-        root.destroy()
 
 
 def progress(message):
@@ -160,9 +130,7 @@ def settings_import(path):
 
 
 def view(wafer, query):
-    def get(key, default=""):
-        return query.get(key, [default])[0]
-
+    get = query.get
     wt = int(get("wt", "1")) - 1
     if not 0 <= wt < len(wafer.phases):
         raise ValueError("WT 超出範圍。")
@@ -222,138 +190,103 @@ def view(wafer, query):
             "page": page, "highlighted": highlighted}
 
 
-class App(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
+class DesktopAPI:
+    def __init__(self):
+        self._window = None
 
-    def respond(self, data, status=200):
-        payload = json.dumps(data, ensure_ascii=False).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-
-    def authorized_host(self):
-        return self.headers.get("Host") == f"127.0.0.1:{self.server.server_port}"
-
-    def do_GET(self):
-        if not self.authorized_host():
-            return self.respond({"error": "Local access only"}, 403)
-        route = urlparse(self.path)
+    def request(self, action, data):
+        """Dispatch operations from the desktop page over the native JS bridge."""
         try:
-            files = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
-                     "/style.css": ("style.css", "text/css")}
-            if route.path in files:
-                name, mime = files[route.path]
-                payload = (HERE / "web" / name).read_bytes().replace(b"__TOKEN__", TOKEN.encode()) if name == "index.html" else (
-                    HERE / "web" / name).read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", f"{mime}; charset=utf-8")
-                self.send_header("Content-Length", str(len(payload)))
-                self.send_header("X-Content-Type-Options", "nosniff")
-                self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
-                self.end_headers()
-                self.wfile.write(payload)
-                return
-            if self.headers.get("X-SRAM-Token") != TOKEN:
-                return self.respond({"error": "Invalid session"}, 403)
-            if route.path == "/api/status":
+            if action == "status":
                 with LOCK:
                     result = {k: v for k, v in STATE.items() if k != "wafer"}
                     wafer = STATE["wafer"]
-                result["data"] = None if wafer is None else {
-                    "label": wafer.label, "chips": len(wafer.chips), "phases": len(wafer.phases),
-                    "patterns": list(wafer.config.patterns), "mode": wafer.config.mode,
-                    "source_mode": wafer.source_mode, "manifest": wafer.manifest}
-                return self.respond(result)
-            if route.path == "/api/settings":
-                return self.respond({"settings": get_settings(), "modes": MODES})
-            if route.path == "/api/view":
+                    result["data"] = None if wafer is None else {
+                        "label": wafer.label, "chips": len(wafer.chips), "phases": len(wafer.phases),
+                        "patterns": list(wafer.config.patterns), "mode": wafer.config.mode,
+                        "source_mode": wafer.source_mode, "manifest": wafer.manifest}
+                return result
+            if action == "settings":
+                with LOCK:
+                    return {"settings": get_settings(), "modes": MODES}
+            if action == "view":
                 with LOCK:
                     wafer = STATE["wafer"]
-                if wafer is None:
-                    raise ValueError("請先執行分析。")
-                return self.respond(view(wafer, parse_qs(route.query, keep_blank_values=True)))
-            return self.respond({"error": "頁面不存在"}, 404)
-        except (OSError, ValueError, KeyError) as exc:
-            self.respond({"error": str(exc)}, 400)
-
-    def do_POST(self):
-        if (not self.authorized_host() or self.headers.get("X-SRAM-Token") != TOKEN
-                or self.headers.get("Origin") not in (None, f"http://127.0.0.1:{self.server.server_port}")):
-            return self.respond({"error": "Invalid session"}, 403)
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 2_000_000:
-                raise ValueError("設定內容格式或大小不符。")
-            data = json.loads(self.rfile.read(length))
-            path = urlparse(self.path).path
-            if path == "/api/pick":
-                kind = data["kind"]
-                if kind not in ("asc", "settings", "report", "folder"):
-                    raise ValueError("不支援的檔案選擇方式。")
-                result = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--pick", kind],
-                                        check=True, capture_output=True, encoding="utf-8",
-                                        env=os.environ | {"PYTHONIOENCODING": "utf-8"})
-                paths = json.loads(result.stdout)
-                return self.respond({"paths": paths, "config": settings_import(Path(paths[0]))
-                                    if kind == "settings" and paths else None})
-            if path == "/api/demo":
-                return self.respond({"paths": [str(DEMO / f"SIM128_WT{i}.asc") for i in range(1, 4)],
-                                     "config": {"mode": data.get("mode", "FBC0"),
-                                                "rows": csv_config(DEMO / "Config_TNO.csv")}})
-            if path == "/api/save-settings":
+                    if wafer is None:
+                        raise ValueError("請先執行分析。")
+                    return view(wafer, data)
+            if action == "pick":
+                return self._pick(data["kind"])
+            if action == "demo":
+                return {"paths": [str(DEMO / f"SIM128_WT{i}.asc") for i in range(1, 4)],
+                        "config": {"mode": data.get("mode", "FBC0"),
+                                   "rows": csv_config(DEMO / "Config_TNO.csv")}}
+            if action == "save-settings":
                 key = data["profile"]
                 if key not in ("full", "batch"):
                     raise ValueError("設定類型無效。")
                 config = Config.create(data["rows"], data["mode"], full=key == "full")
-                save_settings(key, config)
-                return self.respond(config.json())
-            jobs = {"/api/analyze": "analyze", "/api/batch": "batch", "/api/export": "export", "/api/reopen": "reopen"}
-            if path not in jobs:
-                return self.respond({"error": "找不到此操作"}, 404)
+                with LOCK:
+                    save_settings(key, config)
+                return config.json()
+            if action not in ("analyze", "batch", "export", "reopen"):
+                raise ValueError("找不到此操作。")
             with LOCK:
                 if STATE["working"]:
-                    return self.respond({"error": "前一項作業仍在執行。"}, 409)
-                if path == "/api/export":
+                    raise ValueError("前一項作業仍在執行。")
+                if action == "export":
                     data["wafer"] = STATE["wafer"]
                     if data["wafer"] is None:
                         raise ValueError("請先執行分析。")
                 STATE.update(working=True, message="準備資料", error="", output=[], warnings=[])
-            Thread(target=run_job, args=(jobs[path], data), daemon=True).start()
-            self.respond({"started": True}, 202)
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
-            self.respond({"error": str(exc)}, 400)
+            Thread(target=run_job, args=(action, data), daemon=True).start()
+            return {"started": True}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {"bridge_error": str(exc)}
+
+    def _pick(self, kind):
+        from webview import FileDialog
+
+        if kind == "folder":
+            paths = self._window.create_file_dialog(FileDialog.FOLDER)
+        elif kind == "asc":
+            paths = self._window.create_file_dialog(FileDialog.OPEN, allow_multiple=True,
+                                                    file_types=("ASC Raw Data (*.asc)",))
+        elif kind in ("settings", "report"):
+            types = ("Excel / CSV (*.xlsx;*.xlsm;*.csv)",) if kind == "settings" else ("Excel (*.xlsx;*.xlsm)",)
+            paths = self._window.create_file_dialog(FileDialog.OPEN, file_types=types)
+        else:
+            raise ValueError("不支援的檔案選擇方式。")
+        paths = list(paths or ())
+        return {"paths": paths, "config": settings_import(Path(paths[0])) if kind == "settings" and paths else None}
+
+
+def desktop_html():
+    assets = HERE / "web"
+    page = (assets / "index.html").read_text(encoding="utf-8")
+    style = (assets / "style.css").read_text(encoding="utf-8")
+    script = (assets / "app.js").read_text(encoding="utf-8")
+    return page.replace("<!-- APP_STYLE -->", f"<style>{style}</style>").replace(
+        "<!-- APP_SCRIPT -->", f"<script>{script}</script>")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--no-browser", action="store_true")
-    parser.add_argument("--pick", choices=["asc", "settings", "report", "folder"])
-    args = parser.parse_args()
-    if args.pick:
-        print(json.dumps(choose_files(args.pick)))
-        return
-    get_settings()
-    try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), App)
-    except OSError:
-        if args.no_browser:
-            raise
-        server = ThreadingHTTPServer(("127.0.0.1", 0), App)
-    url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"SRAM Wafer Studio  {url}", flush=True)
-    if not args.no_browser:
-        webbrowser.open(url)
-    try:
-        with server:
-            server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    import webview
+
+    api = DesktopAPI()
+    api._window = webview.create_window("SRAM Wafer Studio", html=desktop_html(), js_api=api,
+                                        width=1440, height=950, min_size=(760, 600))
+    webview.start(gui="edgechromium", http_server=False)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        if sys.stderr is not None:
+            raise
+        from ctypes import windll
+
+        windll.user32.MessageBoxW(0, f"無法啟動 SRAM Wafer Studio。請確認已安裝 Microsoft Edge WebView2 Runtime。\n\n{error}",
+                                  "SRAM Wafer Studio", 0x10)
+        raise SystemExit(1)

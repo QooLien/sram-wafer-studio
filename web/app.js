@@ -1,6 +1,5 @@
 
 const $ = id => document.getElementById(id);
-const token = document.querySelector('meta[name=sram-token]').content;
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
@@ -22,13 +21,9 @@ function options(select, values, selected) {
   if (String(selected) in values) select.value = selected;
 }
 async function api(path, body) {
-  const resp = await fetch('/api/' + path, {
-    method:body === undefined ? 'GET' : 'POST',
-    headers:{'X-SRAM-Token':token,'Content-Type':'application/json'},
-    body:body === undefined ? undefined : JSON.stringify(body)
-  });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  const [action, query] = path.split('?', 2);
+  const data = await window.pywebview.api.request(action, body ?? Object.fromEntries(new URLSearchParams(query)));
+  if (data.bridge_error) throw new Error(data.bridge_error);
   return data;
 }
 function notice(text, type='') {
@@ -466,10 +461,12 @@ $('save-config').onclick=safe(async()=>{
   s.config[key]=await api('save-settings',{profile:key,rows:data.rows,mode:key==='full'?s.mode:data.mode});
   renderSettings();notice('已儲存 '+(key==='full'?'完整版':'批次匯出')+'設定。');
 });
-safe(async()=>{
+const initialize = safe(async () => {
   const settings=await api('settings');s.config=settings.settings;s.mode=s.config.full.mode;modes();
   renderFiles();renderFiles(true);
   const result=await api('status');s.last=result;
   if(result.data)setReport(result.data);
   if(result.working)await waitJob('analyze');
-})();
+});
+if (window.pywebview?.api?.request) initialize();
+else window.addEventListener('pywebviewready', initialize, {once:true});

@@ -3,17 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="sram-token" content="__TOKEN__">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>SRAM Wafer Studio</title>
-<link rel="stylesheet" href="/style.css">
-<script src="/app.js" defer></script>
+<!-- APP_STYLE -->
 </head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="/" aria-label="SRAM Wafer Studio">
+  <button class="brand" type="button" data-page="import" aria-label="SRAM Wafer Studio">
     <svg width="34" height="34" viewBox="0 0 36 36" aria-hidden="true"><rect x="1" y="1" width="34" height="34" rx="8" fill="#66d8cb"/><path d="M11 11h14v14H11zM7 14h4m-4 8h4m14-8h4m-4 8h4M14 7v4m8-4v4m-8 14v4m8-4v4" stroke="#132638" stroke-width="2" fill="none"/><path d="M15 15h6v6h-6z" fill="#132638"/></svg>
     <span>SRAM <strong>Wafer Studio</strong></span>
-  </a>
+  </button>
   <nav aria-label="工作區">
     <button class="nav selected" data-page="import"><span>⇥</span>匯入 ASC</button>
     <button class="nav" data-page="maps"><span>▦</span>Wafer Maps</button>
@@ -85,5 +84,6 @@
 </section>
 </main>
 <dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button id="close-modal" class="quiet" aria-label="關閉">✕</button></div><div id="modal-content"></div></dialog>
+<!-- APP_SCRIPT -->
 </body>
 </html>

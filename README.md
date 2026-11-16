@@ -2,9 +2,9 @@
 
 ## 啟動
 
-在 Windows 解壓縮 GitHub 的下載檔，開啟 **Start SRAM Wafer Studio.cmd**。需要 Python 3.11 以上，並加入 PATH。第一次若缺少套件，啟動程式會建立專案自己的 Python 環境並安裝套件。關閉命令視窗即可停止工具。
+在 Windows 解壓縮下載檔，雙擊 **Start SRAM Wafer Studio.cmd** 即可開啟桌面視窗。需要 Python 3.11 以上（加入 PATH）和 Microsoft Edge WebView2 Runtime。初次啟動若缺少套件，啟動程式會在專案內建立 Python 環境並安裝依賴。
 
-也可先執行 `python -m pip install -r requirements.txt`，再執行 `python app.py`。瀏覽器連線至本機工作區，ASC、Excel 設定及分析結果由本機程式處理。
+也可執行 `python -m pip install -r requirements.txt` 後執行 `python app.py` 開啟同一個桌面視窗。所有操作均在本機處理，無需開啟瀏覽器、輸入 IP 或使用連接埠。
 
 `examples/sim128/` 包含 WT1～WT3 的合成 ASC 和對應的 TNO 設定，可在介面選「載入 128 芯片範例」試跑。
 
@@ -23,4 +23,4 @@
 - Address Coverage 使用同 WT／Chip／BLK 在 Pattern 區間的 Address 聯集，並保留終點 FBC 和地址差。
 - FBC0 取首次正值 FBC 前一個電壓。FBC1～10 取首次達門檻的當站。FBC90% 取第一次達該 BLK 在 Pattern 內最高 FBC 的 90% 的站點。
 - Chip Vmin 取有效 BLK 中的最高 Vmin。Tail 基於每顆 Chip／WT 正值峰值 FBC 的 Q3 + 1.5 × IQR，至少四個完整樣本才套用。缺資料會在狀態和明細中保留。
-- 「核對既有 VBA 結果」可讀取同一本舊 .xlsm 內的 Config、Fail Address、FBC by BLK 和 Import Index，驗證來源後重新核對。瀏覽器負責互動，輸出的 .xlsx 報表是靜態資料。
+- 「核對既有 VBA 結果」可讀取同一本舊 .xlsm 內的 Config、Fail Address、FBC by BLK 和 Import Index，驗證來源後重新核對。桌面視窗負責互動，輸出的 .xlsx 報表是靜態資料。
