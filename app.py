@@ -14,6 +14,7 @@ from engine import Config, MODES, csv_config, identity, load_wafer
 from workbook_settings import workbook_config
 from workbook_results import read_existing
 from exports import AUDIT_COLUMNS, MAPS, VMIN_COLUMNS, batch_name, compare_order, save_report, test_headers
+from pattern_reports import save_pattern_report
 
 HERE = Path(__file__).resolve().parent
 DEMO = HERE / "examples" / "sim128"
@@ -51,6 +52,19 @@ def run_job(action, data):
             wafer, warnings = read_existing(Path(data["path"]), progress)
             progress("重新核對 Excel 的 Address 與 FBC")
             wafer.map_stats
+        elif action == "pattern-export":
+            wafer = data["wafer"]
+            folder = Path(data["folder"])
+            wt = wafer.wt_numbers.index(int(data["wt"]))
+            chip = tuple(map(int, data["chip"]))
+            blk = int(data["blk"])
+            pattern = data["pattern"]
+            if wafer.source_mode == "address" or chip not in wafer.chips or not 0 <= blk < 256:
+                raise ValueError("請選取具有 FBC 的 Chip 與 BLK。")
+            if pattern not in wafer.config.patterns:
+                raise ValueError("請選取可用的 Pattern。")
+            progress(f"匯出 WT{wafer.wt_numbers[wt]} BLK {blk} · {pattern}")
+            output.extend(map(str, save_pattern_report(wafer, folder, wt, chip, blk, pattern, data["kind"])))
         elif action == "export":
             wafer = data["wafer"]
             folder = Path(data["folder"]) if data.get("folder") else wafer.phases[0].source.path.parent
@@ -131,9 +145,10 @@ def settings_import(path):
 
 def view(wafer, query):
     get = query.get
-    wt = int(get("wt", "1")) - 1
-    if not 0 <= wt < len(wafer.phases):
-        raise ValueError("WT 超出範圍。")
+    number = int(get("wt", wafer.wt_numbers[0]))
+    if number not in wafer.wt_numbers:
+        raise ValueError(f"尚未匯入 WT{number} 的資料。")
+    wt = wafer.wt_numbers.index(number)
     kind = get("view", "map")
     pattern = get("pattern", next(iter(wafer.config.patterns), ""))
     if kind == "map":
@@ -156,12 +171,13 @@ def view(wafer, query):
         detail["addresses"] = []
         for name, scope in wafer.config.patterns.items():
             for row in wafer.address_info(wt, chip, blk, scope):
-                detail["addresses"].append(row | {"pattern": name})
+                detail["addresses"].append(row | {"pattern": name,
+                                                "function_voltages": wafer.config.voltages_for(row["function"])})
         return detail
     if kind == "audit":
         headers = list(AUDIT_COLUMNS.values())
         source = ([row[k] for k in AUDIT_COLUMNS] for row in wafer.audit()
-                  if row["wt"] == wt + 1 and (not pattern or row["pattern"] == pattern)
+                  if row["wt"] == number and (not pattern or row["pattern"] == pattern)
                   and (chip is None or (row["x"], row["y"]) == chip))
     elif kind == "address":
         headers = ["X", "Y", "BLK", "WL", "BL", "IO", "Cat.", *test_headers(wafer)]
@@ -203,6 +219,7 @@ class DesktopAPI:
                     wafer = STATE["wafer"]
                     result["data"] = None if wafer is None else {
                         "label": wafer.label, "chips": len(wafer.chips), "phases": len(wafer.phases),
+                        "wt_numbers": wafer.wt_numbers,
                         "patterns": list(wafer.config.patterns), "mode": wafer.config.mode,
                         "source_mode": wafer.source_mode, "manifest": wafer.manifest}
                 return result
@@ -229,12 +246,12 @@ class DesktopAPI:
                 with LOCK:
                     save_settings(key, config)
                 return config.json()
-            if action not in ("analyze", "batch", "export", "reopen"):
+            if action not in ("analyze", "batch", "export", "reopen", "pattern-export"):
                 raise ValueError("找不到此操作。")
             with LOCK:
                 if STATE["working"]:
                     raise ValueError("前一項作業仍在執行。")
-                if action == "export":
+                if action in ("export", "pattern-export"):
                     data["wafer"] = STATE["wafer"]
                     if data["wafer"] is None:
                         raise ValueError("請先執行分析。")

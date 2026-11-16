@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
 
-from engine import MODES
+from engine import MODES, voltage_text
 
 
 MAPS = {"fail": "Fail BLK", "wr": "W&R", "loss": "Fail BLK / Loss", "cat": "Cat Wafer Map",
@@ -30,8 +30,8 @@ VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "blk": "BLK", "tno": 
 def test_headers(wafer, comparison=False):
     if comparison:
         return [f"WT{wt} | {t.label} [{t.tno}]" for group in ("Monitor", "Function")
-                for wt in range(1, len(wafer.phases) + 1) for t in wafer.config.tests if t.group == group]
-    return [f"WT{wt} | {t.label} [{t.tno}]" for wt in range(1, len(wafer.phases) + 1)
+                for wt in wafer.wt_numbers for t in wafer.config.tests if t.group == group]
+    return [f"WT{wt} | {t.label} [{t.tno}]" for wt in wafer.wt_numbers
             for t in wafer.config.tests]
 
 
@@ -42,18 +42,7 @@ def compare_order(wafer):
 
 
 def batch_name(wafer):
-    claimed = {}
-    unlabeled = []
-    for phase in wafer.phases:
-        raw = phase.source
-        if raw.source_wt is None:
-            unlabeled.append(raw.version)
-        elif raw.source_wt in claimed:
-            raise ValueError(f"{wafer.label} 有重複的 ASC 檔名 WT 標記。")
-        else:
-            claimed[raw.source_wt] = raw.version
-    for version in unlabeled:
-        claimed[next(wt for wt in (1, 2, 3) if wt not in claimed)] = version
+    claimed = {wt: phase.source.version for wt, phase in zip(wafer.wt_numbers, wafer.phases)}
     if len(set(claimed.values())) == 1:
         suffix = "-".join(f"WT{i}" for i in sorted(claimed)) + f"_Ver{next(iter(claimed.values()))}"
     else:
@@ -108,7 +97,7 @@ def raster_map(wafer, wt, pattern, kind):
     font = ImageFont.truetype("arial.ttf", 22)
     minor = ImageFont.truetype("arial.ttf", 15)
     slope = [t.voltage for t in wafer.config.patterns.get(pattern, ()) if t.voltage is not None]
-    label = f"WT{wt + 1} {wafer.label}"
+    label = f"WT{wafer.wt_numbers[wt]} {wafer.label}"
     if kind == "fail" and slope:
         label += f" {max(slope):.3g}v~{min(slope):.3g}v"
         if any("retention" in t.name.lower() for t in wafer.config.patterns[pattern]):
@@ -282,9 +271,9 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             for wt in range(len(wafer.phases)):
                 first = 7 + wt * ntests
                 for i, test in enumerate(wafer.config.tests):
-                    label = f"WT{wt + 1}\n{test.label}" if report_mode == "full" else headers[wt * ntests + i]
-                    ws.write(0, first + i, label, phase_tall[wt])
-                    ws.write_comment(0, first + i, f"WT{wt + 1} | {test.group} | TNO={test.tno}",
+                    label = f"WT{wafer.wt_numbers[wt]}\n{test.label}" if report_mode == "full" else headers[wt * ntests + i]
+                    ws.write(0, first + i, label, phase_tall[wafer.wt_numbers[wt] - 1])
+                    ws.write_comment(0, first + i, f"WT{wafer.wt_numbers[wt]} | {test.group} | TNO={test.tno}",
                                      {"author": "SRAM Wafer Studio"})
             last, row_numbers = write_rows(ws, (
                 (*row[:7], *(1 if test.tno in flags else None
@@ -295,7 +284,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 for wt in range(len(wafer.phases)):
                     first = 7 + wt * ntests
                     ws.conditional_format(1, first, last, first + ntests - 1, {
-                        "type": "cell", "criteria": "==", "value": 1, "format": phase_flags[wt]})
+                        "type": "cell", "criteria": "==", "value": 1, "format": phase_flags[wafer.wt_numbers[wt] - 1]})
             return row_numbers
 
         def comparison_sheet():
@@ -325,7 +314,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 if not tests:
                     continue
                 for wt in range(len(wafer.phases)):
-                    band(ws, 0, col, col + len(tests) - 1, f"WT{wt + 1} / {group}", phase_headers[wt])
+                    band(ws, 0, col, col + len(tests) - 1, f"WT{wafer.wt_numbers[wt]} / {group}", phase_headers[wafer.wt_numbers[wt] - 1])
                     col += len(tests)
             ws.write_row(1, 0, ("X", "Y", "BLK"), head)
             col = 3
@@ -333,8 +322,8 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 tests = [t for t in wafer.config.tests if t.group == group]
                 for wt in range(len(wafer.phases)):
                     for test in tests:
-                        ws.write(1, col, test.label, phase_tall[wt])
-                        ws.write_comment(1, col, f"WT{wt + 1} | {group} | TNO={test.tno}",
+                        ws.write(1, col, test.label, phase_tall[wafer.wt_numbers[wt] - 1])
+                        ws.write_comment(1, col, f"WT{wafer.wt_numbers[wt]} | {group} | TNO={test.tno}",
                                          {"author": "SRAM Wafer Studio"})
                         col += 1
             last, _ = write_rows(ws, rows, first=2)
@@ -362,7 +351,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             span = step * columns
             end = (x1 - x0 + 1) * span
             suffix = f"  {pattern}" if pattern else ""
-            band(ws, top, 0, max(end, 6), f"WT{wt + 1}  {wafer.label}{suffix}  {MAPS[kind]}", phase_headers[wt])
+            band(ws, top, 0, max(end, 6), f"WT{wafer.wt_numbers[wt]}  {wafer.label}{suffix}  {MAPS[kind]}", phase_headers[wafer.wt_numbers[wt] - 1])
             ws.set_row(top, 23)
             ws.write(top + 1, 0, "Y/X", axis)
             for x in range(x0, x1 + 1):
@@ -447,7 +436,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 band(ws, row, col, col + 3, "", link)
                 ws.set_row(row, 32)
                 ws.write_url(row, col, f"internal:'Wafer Maps'!A{dest + 1}", link,
-                             string=f"WT{wt + 1} {pattern} {MAPS[layer]}")
+                             string=f"WT{wafer.wt_numbers[wt]} {pattern} {MAPS[layer]}")
             for dest, wt, pattern, layer in panels:
                 map_panel(ws, dest, wt, layer, pattern, 2 if layer == "fail" else 1)
                 ws.write_url(dest + height * (2 if layer == "wr" else 1) + 2, 0,
@@ -459,17 +448,19 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             selected = chip if chip in wafer.chips else default_chip
             ws = worksheet("BLK Pattern Distribution")
             ws.set_zoom(70)
-            ws.set_column(0, 95, 3.15)
+            block_width = 2 * len(wafer.wt_numbers)
+            last_col = 16 * block_width - 1
+            ws.set_column(0, last_col, 18.9 / block_width)
             ws.freeze_panes(4, 0)
             x, y = selected
-            band(ws, 0, 0, 95, f"256 BLK Distribution  |  X{x} Y{y}  |  {wafer.config.mode}", title)
+            band(ws, 0, 0, last_col, f"256 BLK Distribution  |  X{x} Y{y}  |  {wafer.config.mode}", title)
             ws.set_row(0, 26)
-            band(ws, 1, 0, 95, "/".join(wafer.config.patterns), mid)
+            band(ws, 1, 0, last_col, "/".join(wafer.config.patterns), mid)
             entries = wafer.grid(selected)
-            for col in range(0, 96, 6):
+            for col in range(0, last_col + 1, block_width):
                 for wt in range(len(wafer.phases)):
-                    band(ws, 2, col + wt * 2, col + wt * 2 + 1, f"WT{wt + 1}", phase_headers[wt])
-            for col in range(0, 96, 6):
+                    band(ws, 2, col + wt * 2, col + wt * 2 + 1, f"WT{wafer.wt_numbers[wt]}", phase_headers[wafer.wt_numbers[wt] - 1])
+            for col in range(0, last_col + 1, block_width):
                 for wt in range(len(wafer.phases)):
                     ws.write_row(3, col + wt * 2, ("W", "R"), axis)
             colors = {name: ("#ffe0aa", "#c8d9ef", "#cde8ca", "#f0ccee", "#dddbf5")[i % 5]
@@ -492,30 +483,27 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                         elif trigger["voltage"] is not None:
                             label = f'{trigger["voltage"]:.3f}'.rstrip('0').rstrip('.') + "v"
                     fmt = map_cell_format(color, "#17324d", "", (1, 1, 1, 0))
-                    band(ws, start, col * 6, col * 6 + 5, label, fmt)
+                    band(ws, start, col * block_width, (col + 1) * block_width - 1, label, fmt)
                     note = f'BLK {record["blk"]}'
                     if trigger:
                         note += f'\nWT{trigger["wt"]} {trigger["pattern"]} · TNO {trigger["tno"]}'
-                    ws.write_comment(start, col * 6, note, {"author": "SRAM Wafer Studio"})
+                    ws.write_comment(start, col * block_width, note, {"author": "SRAM Wafer Studio"})
                 ws.set_row(start + 1, 9)
                 for col in range(16):
                     record = entries[row + 16 * col]
-                    for wt in range(3):
-                        phase = record["states"][wt] if wt < len(record["states"]) else {}
-                        color = "#ff9999" if record["hard"] else "#00b0f0" if record["blk"] in clean_blocks else {
-                            "Pass": "#00b0f0", "Fail": "#f35b53"}.get(phase.get("status"), "#e2e8f0")
-                        band(ws, start + 1, col * 6 + wt * 2, col * 6 + wt * 2 + 1, "",
+                    for wt, phase in enumerate(record["states"]):
+                        color = {"Pass": "#00b0f0", "Fail": "#f35b53"}.get(phase["status"], "#e2e8f0")
+                        band(ws, start + 1, col * block_width + wt * 2, col * block_width + wt * 2 + 1, "",
                              map_cell_format(color, "#17324d", "", (1, 1, 0, 0)))
                 ws.set_row(start + 2, 15)
                 for col in range(16):
                     record = entries[row + 16 * col]
-                    for wt in range(3):
-                        phase = record["states"][wt] if wt < len(record["states"]) else {}
+                    for wt, phase in enumerate(record["states"]):
                         for offset, side in enumerate(("w", "r")):
-                            n = phase.get(side, 0)
+                            n = phase[side]
                             color = "#ff9999" if record["hard"] else "#00b0f0" if record["blk"] in clean_blocks else (
                                 "#ffd966" if side == "w" and n else "#ffffff")
-                            ws.write(start + 2, col * 6 + wt * 2 + offset, n or None,
+                            ws.write(start + 2, col * block_width + wt * 2 + offset, n or None,
                                      map_cell_format(color, "#17324d", "", (offset == 0, offset == 1, 0, 1)))
             for i, (name, color) in enumerate(colors.items()):
                 band(ws, 53 + i, 0, 14, name, map_cell_format(color, "#17324d", "", (1, 1, 1, 1)))
@@ -531,7 +519,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
         if report_mode == "full":
             table("Fail Analysis", ["WT", "Pattern", "X", "Y", "Fail BLK Count", "Status", "Read", "Write",
                                     "Read & Write", "No Monitor", "Loss BLK"], (
-                (wt + 1, name, *chip, mask.bit_count() if isinstance(mask, int) else None,
+                (wafer.wt_numbers[wt], name, *chip, mask.bit_count() if isinstance(mask, int) else None,
                  ("Fail" if mask else "Pass") if isinstance(mask, int) else mask,
                  *wafer.map_stats.get((wt, name, chip), [0] * 5))
                 for (wt, name, chip), mask in wafer.fail_maps.items()))
@@ -551,20 +539,22 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             last, _ = write_rows(ws, ((f"WT{row[k]}" if k == "wt" else row[k] for k in missing_order)
                                       for row in wafer.audit()), first=4)
             ws.autofilter(3, 0, last, 14)
-            cols = ["WT", "Pattern", "X", "Y", "BLK", "WL", "BL", "IO", "Function TNOs", "Write TNOs",
+            cols = ["WT", "Pattern", "X", "Y", "BLK", "WL", "BL", "IO", "Function Voltage (V)", "Write TNOs",
                     "Read TNOs", "Classification", "Source Row"]
             ws = new_table("Monitor Fail Analysis", cols)
+            ws.set_column("I:I", 28, grid)
             end = 0
             for entry in wafer.audit():
                 wt, name = entry["wt"], entry["pattern"]
                 chip = entry["x"], entry["y"]
-                for row in wafer.address_info(wt - 1, chip, entry["blk"], wafer.config.patterns[name]):
+                for row in wafer.address_info(wafer.wt_numbers.index(wt), chip, entry["blk"], wafer.config.patterns[name]):
                     end += 1
                     if end >= 1_048_576:
                         raise ValueError("Monitor Fail Analysis 超過 Excel 的列數上限。")
                     addr = row["address"]
-                    ws.write_row(end, 0, (wt, name, *chip, *addr, *(
-                        ",".join(map(str, row[key])) for key in ("function", "write", "read")), row["category"]))
+                    volts = ", ".join(map(voltage_text, wafer.config.voltages_for(row["function"])))
+                    ws.write_row(end, 0, (wt, name, *chip, *addr, volts, *(
+                        ",".join(map(str, row[key])) for key in ("write", "read")), row["category"]))
                     source = addresses.get((*chip, *addr))
                     if source and end <= 65530:
                         ws.write_url(end, 12, f"internal:'Fail Address'!A{source}", string=str(source))
@@ -572,7 +562,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                         ws.write_number(end, 12, source)
             ws.autofilter(0, 0, end, len(cols) - 1)
             table("Chip Vmin", ["WT", "X", "Y", *VMIN_COLUMNS.values()],
-                  ((wt + 1, *chip, *((",".join(map(str, result[k])) if isinstance(result[k], list) else result[k])
+                  ((wafer.wt_numbers[wt], *chip, *((",".join(map(str, result[k])) if isinstance(result[k], list) else result[k])
                                     for k in VMIN_COLUMNS)) for (wt, chip), result in wafer.all_vmin.items()))
             unified_maps()
             map_sheet("Cat Wafer Map", "cat", repair=True)
@@ -589,8 +579,8 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
 def save_report(wafer, folder, kind, stem=None, *, chip=None):
     folder.mkdir(parents=True, exist_ok=True)
     extension = "pptx" if kind == "ppt" else "xlsx"
-    path = output_path(folder, stem or f"{wafer.label}_WT1" + (
-        f"-WT{len(wafer.phases)}" if len(wafer.phases) > 1 else "") + f"_{kind}", extension)
+    temperatures = "-".join(f"WT{wt}" for wt in wafer.wt_numbers)
+    path = output_path(folder, stem or f"{wafer.label}_{temperatures}_{kind}", extension)
     with NamedTemporaryFile(dir=folder, prefix=".sram-", suffix=f".{extension}", delete=False) as temp:
         part = Path(temp.name)
     try:

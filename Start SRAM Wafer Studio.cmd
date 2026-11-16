@@ -9,7 +9,7 @@ if errorlevel 1 (
 )
 set "SRAM_PY=python"
 if exist ".venv\Scripts\python.exe" set "SRAM_PY=.venv\Scripts\python.exe"
-"%SRAM_PY%" -c "import openpyxl, xlsxwriter, PIL, pptx, webview; from webview import FileDialog" >nul 2>nul
+"%SRAM_PY%" -c "import openpyxl, xlsxwriter, PIL, pptx, webview, matplotlib; from webview import FileDialog" >nul 2>nul
 if errorlevel 1 (
   if not exist ".venv\Scripts\python.exe" python -m venv .venv
   if errorlevel 1 goto failed

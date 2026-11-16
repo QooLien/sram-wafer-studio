@@ -8,3 +8,5 @@ Address_*/
 *.xlsx
 *.xlsm
 *.pptx
+Analysis_*/
+releases/*.zip.tmp

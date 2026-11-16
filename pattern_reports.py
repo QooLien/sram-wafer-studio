@@ -1,0 +1,266 @@
+"""Publication figures and an editable workbook for one WT/Chip/BLK/Pattern."""
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import date
+from itertools import groupby
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from engine import voltage_text
+from exports import output_path
+
+CURVE = "#204f78"
+THRESHOLD = "#9b422e"
+INK = "#202630"
+GRID = "#dde2e7"
+PALETTE = ("#204f78", "#b86b30", "#477958", "#8a577b", "#657481", "#9a8737", "#40798b")
+HATCHES = ("", "//", "..", "xx", "\\\\", "++", "oo")
+
+
+def voltage_units(value):
+    return "Unspecified" if value is None else f"{voltage_text(value)} V"
+
+
+def judge_summary(judge):
+    if judge["tno"] is not None:
+        return f'First crossing at {voltage_units(judge["voltage"])}  |  {judge["func"]}  |  TNO {judge["tno"]}'
+    if judge["status"] == "Pass":
+        return "All pass  |  Peak FBC 0"
+    return "FBC90% unavailable  |  " + judge["status"]
+
+
+def write_figures(pdf, png, title, stations, judge):
+    from matplotlib import rc_context
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+    from matplotlib.ticker import MaxNLocator, PercentFormatter
+
+    runs = []
+    for voltage, records in groupby(enumerate(stations), key=lambda indexed: indexed[1]["v"]):
+        indexes = [index for index, _ in records]
+        runs.append(((indexes[0] + indexes[-1]) / 2, voltage_units(voltage)))
+    groups = defaultdict(list)
+    for row in stations:
+        if row["v"] is not None:
+            groups[row["v"]].append(row)
+    series = dict.fromkeys(row["func"] for row in stations if row["fbc"] is not None and row["v"] is not None)
+    styles = {name: (PALETTE[i % len(PALETTE)], HATCHES[i % len(HATCHES)]) for i, name in enumerate(series)}
+    width = min(22, max(10, 0.76 * max(len(runs), len(groups)) + 2.5))
+    with rc_context({
+        "font.family": "serif", "font.serif": ["STIXGeneral", "Microsoft JhengHei", "DejaVu Serif"],
+        "font.size": 14, "mathtext.fontset": "stix", "pdf.fonttype": 42, "text.parse_math": False,
+        "axes.labelcolor": INK, "xtick.color": INK, "ytick.color": INK, "text.color": INK,
+    }):
+        fig = Figure(figsize=(width, 8.7), layout="constrained", facecolor="white")
+        FigureCanvasAgg(fig)
+        fig.get_layout_engine().set(w_pad=0.17, h_pad=0.13, hspace=0.07)
+        fig.suptitle(title, fontsize=21, weight="bold")
+        curve, bars = fig.subplots(2, 1)
+        for axis in (curve, bars):
+            axis.spines[["top", "right"]].set_visible(False)
+            axis.spines[["bottom", "left"]].set_color(INK)
+            axis.set_axisbelow(True)
+            axis.grid(axis="y", color=GRID, linewidth=0.7)
+            axis.tick_params(labelsize=14, length=4, width=0.8)
+            axis.set_xlabel("Test voltage (config order)", fontsize=16, labelpad=8)
+
+        curve.set_title("(a)  FBC90% accumulation\n" + judge_summary(judge), loc="left", fontsize=17, pad=12)
+        curve.set_ylabel("Cumulative FBC (%)", fontsize=16)
+        curve.set_ylim(0, 1.06)
+        curve.set_yticks((0, 0.25, 0.50, 0.75, 0.90, 1))
+        curve.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        curve.set_xticks([x for x, _ in runs], [label for _, label in runs],
+                         rotation=35 if len(runs) > 15 else 0)
+        curve.set_xlim(-0.55, max(0.55, len(stations) - 0.45))
+        if stations[0]["accumulated"] is not None:
+            y = [row["accumulated"] for row in stations]
+            curve.plot(range(len(y)), y, color=CURVE, marker="o", markerfacecolor="white",
+                       markersize=5, linewidth=1.9, zorder=3)
+            if judge["tno"] is not None:
+                hit = next(i for i, row in enumerate(stations) if row["tno"] == judge["tno"])
+                curve.axhline(0.9, color=THRESHOLD, linestyle=(0, (5, 3)), linewidth=1.1)
+                curve.plot(hit, y[hit], color=THRESHOLD, marker="D", markersize=7,
+                           markeredgecolor="white", zorder=4)
+        else:
+            curve.text(0.5, 0.5, "No valid accumulation for this BLK", transform=curve.transAxes,
+                       ha="center", va="center", color="#555e69", fontsize=15)
+
+        bars.set_title("(b)  FBC by test voltage and function", loc="left", fontsize=17, pad=12)
+        bars.set_ylabel("Fail bit count (FBC)", fontsize=16)
+        labels = list(groups)
+        bars.set_xticks(range(len(labels)), [voltage_units(v) for v in labels],
+                        rotation=35 if len(labels) > 15 else 0)
+        recorded = [row["fbc"] for values in groups.values() for row in values if row["fbc"] is not None]
+        bars.set_ylim(0, max(1, 1.16 * max(recorded, default=0)))
+        bars.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=5))
+        plotted = set()
+        for index, values in enumerate(groups.values()):
+            slot = 0.82 / len(values)
+            for i, row in enumerate(values):
+                if row["fbc"] is None:
+                    continue
+                name = row["func"]
+                color, hatch = styles[name]
+                x = index + (i - (len(values) - 1) / 2) * slot
+                bar = bars.bar(x, row["fbc"], width=slot * 0.86, color=color, hatch=hatch,
+                               edgecolor=INK, linewidth=0.55, label=name if name not in plotted else None)
+                if row["fbc"] and len(recorded) <= 18:
+                    bars.bar_label(bar, labels=[f'{row["fbc"]:,}'], padding=3, fontsize=12)
+                if row["fbc"] == 0:
+                    bars.plot(x, 0, marker="_", markersize=6, color=color, clip_on=False)
+                plotted.add(name)
+        if plotted:
+            bars.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncols=min(len(plotted), 5),
+                        frameon=False, fontsize=12, borderaxespad=0)
+            bars.set_title("", loc="left")
+            bars.set_title("(b)  FBC by test voltage and function", loc="left",
+                           fontsize=17, pad=14 + 15 * ((len(plotted) + 4) // 5))
+        else:
+            bars.text(0.5, 0.5, "No test voltage with measured FBC", transform=bars.transAxes,
+                      ha="center", va="center", color="#555e69", fontsize=15)
+        fig.savefig(pdf, metadata={"Title": title})
+        fig.savefig(png, dpi=300)
+
+
+def write_workbook(path, title, stations, judge, matches):
+    from xlsxwriter import Workbook
+
+    with Workbook(path, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
+        figures = book.add_worksheet("Figures")
+        sweep = book.add_worksheet("Sweep Data")
+        addresses = book.add_worksheet("Fail Address Match")
+        header = book.add_format({"font_name": "Cambria", "font_size": 12, "bold": True,
+                                  "bg_color": CURVE, "font_color": "white", "valign": "vcenter"})
+        title_fmt = book.add_format({"font_name": "Cambria", "font_size": 19, "bold": True,
+                                     "font_color": INK, "valign": "vcenter"})
+        basic = book.add_format({"font_name": "Cambria", "font_size": 12, "font_color": INK})
+        pct = book.add_format({"font_name": "Cambria", "font_size": 12, "num_format": "0.0%"})
+        volts = book.add_format({"font_name": "Cambria", "font_size": 12, "num_format": "0.00####"})
+        for ws in (figures, sweep, addresses):
+            ws.hide_gridlines(2)
+            ws.set_default_row(19)
+
+        funcs = list(dict.fromkeys(row["func"] for row in stations))
+        sweep.set_column("A:A", 12, basic)
+        sweep.set_column("B:B", 20, basic)
+        sweep.set_column("C:D", 13, basic)
+        sweep.set_column("E:E", 22, basic)
+        sweep.set_column("F:F", 14, volts)
+        sweep.set_column("G:G", 12, basic)
+        sweep.set_column("H:I", 15, pct)
+        sweep.set_column("J:J", 16, pct)
+        sweep.set_column(10, 9 + len(funcs), 16, basic)
+        sweep.set_row(0, 24)
+        sweep.write_row(0, 0, ("Sequence", "Voltage / TNO", "TNO", "FBC90% hit", "Function", "Voltage (V)",
+                               "FBC", "Accumulated", "Threshold", "First crossing", *funcs), header)
+        for idx, row in enumerate(stations, 1):
+            hit = row["tno"] == judge["tno"]
+            ratio = row["accumulated"]
+            sweep.write_row(idx, 0, (idx, f'{voltage_units(row["v"])} / {row["tno"]}', row["tno"],
+                                     "Yes" if hit else None, row["func"], row["v"], row["fbc"], ratio,
+                                     0.9 if judge["tno"] is not None else None, ratio if hit else None))
+            if row["v"] is not None and row["fbc"] is not None:
+                sweep.write_number(idx, 10 + funcs.index(row["func"]), row["fbc"])
+        sweep.freeze_panes(1, 2)
+        sweep.autofilter(0, 0, len(stations), 9)
+
+        addresses.set_column("A:D", 10, basic)
+        addresses.set_column("E:I", 24, basic)
+        addresses.set_row(0, 24)
+        addresses.write_row(0, 0, ("BLK", "WL", "BL", "IO", "Function Voltage (V)", "Function TNO",
+                                    "Write TNO", "Read TNO", "Classification"), header)
+        last_address = 0
+        for last_address, match in enumerate(matches, 1):
+            addresses.write_row(last_address, 0, (*match["address"], ", ".join(map(voltage_text, match["voltages"])),
+                *(", ".join(map(str, match[key])) for key in ("function", "write", "read")), match["category"]))
+        addresses.freeze_panes(1, 4)
+        addresses.autofilter(0, 0, last_address, 8)
+
+        figures.set_column("A:Q", 12, basic)
+        figures.set_row(0, 36)
+        figures.merge_range("A1:Q1", title, title_fmt)
+        figures.merge_range("A2:Q2", judge_summary(judge), basic)
+        figures.merge_range("A3:Q3", "Accumulation uses the maximum FBC observed through each station, divided by the sweep peak.", basic)
+        font = {"name": "Cambria", "size": 13, "color": INK}
+        axis_title = font | {"size": 15, "bold": True}
+        last = len(stations)
+        categories = ["Sweep Data", 1, 1, last, 1]
+
+        def base_chart(kind, caption, units, maximum=None, fmt=None):
+            chart = book.add_chart({"type": kind, **({"subtype": "stacked"} if kind == "column" else {})})
+            chart.set_title({"name": caption, "name_font": font | {"size": 19, "bold": True}})
+            chart.set_size({"width": max(1000, min(last * 47 + 145, 2800)), "height": 460})
+            chart.set_x_axis({"name": "Test voltage / TNO (config order)", "name_font": axis_title,
+                              "num_font": font | {"rotation": -45}, "line": {"color": INK}})
+            chart.set_y_axis({"name": units, "name_font": axis_title, "num_font": font, "min": 0,
+                              "major_gridlines": {"visible": True, "line": {"color": GRID}},
+                              **({"max": maximum, "num_format": fmt} if maximum else {})})
+            chart.set_legend({"position": "top", "font": font})
+            chart.show_blanks_as("gap")
+            return chart
+
+        start_bars = "A6"
+        if any(row["accumulated"] is not None for row in stations):
+            chart = base_chart("line", "(a) FBC90% accumulation", "Cumulative FBC (%)", 1, "0%")
+            chart.add_series({"name": "Accumulated FBC", "categories": categories,
+                              "values": ["Sweep Data", 1, 7, last, 7], "line": {"color": CURVE, "width": 2},
+                              "marker": {"type": "circle", "size": 5, "fill": {"color": "#ffffff"},
+                                         "border": {"color": CURVE}}})
+            if judge["tno"] is not None:
+                chart.add_series({"name": "90% threshold", "categories": categories,
+                                  "values": ["Sweep Data", 1, 8, last, 8],
+                                  "line": {"color": THRESHOLD, "dash_type": "dash"}})
+                chart.add_series({"name": "First crossing", "categories": categories,
+                                  "values": ["Sweep Data", 1, 9, last, 9], "line": {"none": True},
+                                  "marker": {"type": "diamond", "size": 8, "fill": {"color": THRESHOLD},
+                                             "border": {"color": THRESHOLD}}})
+            figures.insert_chart("A6", chart)
+            start_bars = "A30"
+
+        plotted = {row["func"] for row in stations if row["fbc"] is not None and row["v"] is not None}
+        if plotted:
+            chart = base_chart("column", "(b) FBC by test voltage and function", "Fail bit count (FBC)")
+            for i, func in enumerate(funcs):
+                if func in plotted:
+                    chart.add_series({"name": func, "categories": categories,
+                                      "values": ["Sweep Data", 1, 10 + i, last, 10 + i],
+                                      "fill": {"color": PALETTE[i % len(PALETTE)]},
+                                      "border": {"color": INK, "width": 0.5}})
+            figures.insert_chart(start_bars, chart)
+        else:
+            figures.write(start_bars, "No test voltage with measured FBC.", basic)
+
+
+def save_pattern_report(wafer, folder, wt, chip, blk, pattern, kind):
+    if kind not in ("charts", "excel"):
+        raise ValueError("不支援的 Pattern 匯出格式。")
+    x, y = chip
+    scope = f"{wafer.label}  |  WT{wafer.wt_numbers[wt]}  |  X{x} Y{y}  |  BLK {blk}"
+    title = f"{pattern}  |  {scope}"
+    stem = f"{wafer.label}_WT{wafer.wt_numbers[wt]}_X{x}Y{y}_BLK{blk}_{pattern}"
+    info = wafer.detail(wt, chip, blk)
+    stations = [row for row in info["sweep"] if row["pattern"] == pattern]
+    judge = info["fbc90"][pattern]
+    folder = Path(folder) / f"Analysis_{date.today():%Y%m%d}"
+    folder.mkdir(parents=True, exist_ok=True)
+    extensions = ("pdf", "png") if kind == "charts" else ("xlsx",)
+    with TemporaryDirectory(dir=folder, prefix=".sram-") as temp:
+        staged = [Path(temp) / f"pattern.{ext}" for ext in extensions]
+        if kind == "charts":
+            write_figures(*staged, title, stations, judge)
+        else:
+            matches = (row | {"voltages": wafer.config.voltages_for(row["function"])}
+                       for row in wafer.address_info(wt, chip, blk, wafer.config.patterns[pattern]))
+            write_workbook(staged[0], title, stations, judge, matches)
+        results = []
+        try:
+            for file, ext in zip(staged, extensions):
+                target = output_path(folder, stem, ext)
+                file.rename(target)
+                results.append(target)
+        except OSError:
+            for path in results:
+                path.unlink()
+            raise
+    return results

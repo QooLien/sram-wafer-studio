@@ -6,6 +6,7 @@ from array import array
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from functools import cached_property
+from itertools import combinations
 from math import isfinite
 from pathlib import Path
 import csv
@@ -35,6 +36,13 @@ def bits(mask):
         mask ^= bit
 
 
+def voltage_text(voltage):
+    if voltage is None:
+        return "—"
+    value = f"{voltage:.6f}".rstrip("0")
+    return value + "0" * max(0, 2 - len(value.split(".")[-1]))
+
+
 @dataclass(frozen=True)
 class Test:
     group: str
@@ -48,9 +56,7 @@ class Test:
     def label(self):
         if self.voltage is None:
             return self.name
-        voltage = f"{self.voltage:.6f}".rstrip("0")
-        voltage += "0" * max(0, 2 - len(voltage.split(".")[-1]))
-        return f"{self.name}_{voltage}v"
+        return f"{self.name}_{voltage_text(self.voltage)}v"
 
 
 @dataclass
@@ -145,6 +151,9 @@ class Config:
     @cached_property
     def hard(self):
         return tuple(t for name, scope in self.intervals.items() if name.lower() == "hard fail" for t in scope)
+
+    def voltages_for(self, tnos):
+        return list(dict.fromkeys(self.index[tno].voltage for tno in tnos))
 
     def json(self):
         return {"mode": self.mode, "rows": [asdict(t) for t in self.tests]}
@@ -430,6 +439,23 @@ def observed_category(write, read):
     return GROUPS[0] if read else GROUPS[3]
 
 
+def phase_numbers(sources):
+    """Resolve labels in STEP order when a filename lacks an explicit WT."""
+    labels = tuple(source.source_wt for source in sources)
+    claimed = [label for label in labels if label is not None]
+    if len(claimed) != len(set(claimed)):
+        raise ValueError("同一 Lot／Wafer 的 ASC 檔名 WT 標記不可重複。")
+    if not claimed:
+        return tuple(range(1, len(labels) + 1))
+    if len(claimed) == len(labels):
+        return labels
+    candidates = [numbers for numbers in combinations((1, 2, 3), len(labels))
+                  if all(label is None or label == number for label, number in zip(labels, numbers))]
+    if len(candidates) != 1:
+        raise ValueError("無法從 STEP 確定所有 WT，請在 ASC 檔名標記 WT1、WT2 或 WT3。")
+    return candidates[0]
+
+
 @dataclass
 class Wafer:
     config: Config
@@ -446,14 +472,18 @@ class Wafer:
         return sorted(set().union(*(p.chips for p in self.phases)))
 
     @cached_property
+    def wt_numbers(self):
+        return phase_numbers([phase.source for phase in self.phases])
+
+    @cached_property
     def manifest(self):
         requested = self.config.index.keys()
-        return [{"wt": i + 1, "path": str(p.source.path), "lot": p.source.lot, "version": p.source.version,
+        return [{"wt": wt, "path": str(p.source.path), "lot": p.source.lot, "version": p.source.version,
                  "step": p.source.step, "source_wt": p.source.source_wt, "chips": len(p.chips),
                  "fbc": sum(len(d.fbc) for d in p.chips.values()),
                  "address": sum(len(a) for d in p.chips.values() for a in d.addresses.values()),
                  "invalid": p.invalid_addresses, "duplicates": p.duplicates, "issues": p.issues,
-                 "missing": sorted(requested - p.seen)} for i, p in enumerate(self.phases)]
+                 "missing": sorted(requested - p.seen)} for wt, p in zip(self.wt_numbers, self.phases)]
 
     def die(self, wt, chip):
         return self.phases[wt].chips.get(chip)
@@ -538,7 +568,7 @@ class Wafer:
                            else "Address Count > FBC" if recorded > count else "Complete")
         w, r, wr, none = (sum(row["category"] == group for row in info)
                           for group in (GROUPS[1], GROUPS[0], GROUPS[2], GROUPS[3]))
-        return {"wt": wt + 1, "pattern": pattern, "tno": endpoint.tno, "name": endpoint.name,
+        return {"wt": self.wt_numbers[wt], "pattern": pattern, "tno": endpoint.tno, "name": endpoint.name,
                 "voltage": endpoint.voltage, "x": chip[0], "y": chip[1], "blk": blk, "fbc": count,
                 "recorded": recorded, "gap": max(count - recorded, 0), "total": len(info),
                 "finding": "Complete" if info else "No Address", "endpoint": endpoint_status,
@@ -555,14 +585,16 @@ class Wafer:
     def map_stats(self):
         totals = defaultdict(lambda: [0, 0, 0, 0, 0])
         for row in self.audit():
-            bucket = totals[row["wt"] - 1, row["pattern"], (row["x"], row["y"])]
+            bucket = totals[self.wt_numbers.index(row["wt"]), row["pattern"], (row["x"], row["y"])]
             for i, key in enumerate(("r", "w", "wr", "none")):
                 bucket[i] += row[key]
             bucket[4] += row["finding"] == "No Address"
         return dict(totals)
 
-    def crossings(self, wt, chip):
-        """Yield all pattern eligibility records for a die, without storing the wafer matrix."""
+    def crossings(self, wt, chip, *, blk=None, mode=None):
+        """Yield eligibility and Vmin for each Pattern and requested BLK."""
+        blocks = range(BLKS) if blk is None else (blk,)
+        mode = mode or self.config.mode
         phase = self.phases[wt]
         die = phase.chips.get(chip, ChipData())
         hard, past, complete = self.eligibility(wt, chip)
@@ -571,7 +603,7 @@ class Wafer:
             vectors = [die.fbc.get(t.tno) for t in scope]
             endpoint = die.masks.get(scope[-1].tno)
             sweep_complete = all(vector is not None for vector in vectors)
-            for b in range(BLKS):
+            for b in blocks:
                 mask = 1 << b
                 if hard & mask:
                     state = "Hard Fail"
@@ -588,7 +620,7 @@ class Wafer:
                     continue
                 values = [vector[b] if vector is not None else None for vector in vectors]
                 peak = max((v for v in values if v is not None), default=0)
-                yield name, b, vmin(scope, values, self.config.mode), peak, sweep_complete
+                yield name, b, vmin(scope, values, mode), peak, sweep_complete
             prior_valid &= endpoint is not None
             prior |= endpoint or 0
 
@@ -633,7 +665,7 @@ class Wafer:
         for chip in self.chips:
             row = {"x": chip[0], "y": chip[1]}
             die = self.die(wt, chip)
-            base_cat = self.cat(0, chip)
+            base_cat = self.cat(0, chip) if self.wt_numbers[0] == 1 else None
             if kind in ("cat", "repair"):
                 cat = self.cat(wt, chip, kind == "repair")
                 row |= {"value": cat, "status": f"C{cat}" if cat else "No Data"}
@@ -658,17 +690,23 @@ class Wafer:
     def grid(self, chip):
         chosen, states = {}, defaultdict(dict)
         hard = set(bits(self.eligibility(len(self.phases) - 1, chip)[0]))
-        for wt in range(len(self.phases)):
+        for wt, number in enumerate(self.wt_numbers):
+            incomplete = set()
             for pattern, blk, crossing, peak, _ in self.crossings(wt, chip):
                 state = states[blk].setdefault(wt, {"status": "No Data", "w": 0, "r": 0})
                 if crossing.status in ("Fail", "No Vmin", "Below") or peak > 0:
                     state["status"] = "Fail"
                     if blk not in chosen and crossing.tno is not None:
-                        chosen[blk] = asdict(crossing) | {"wt": wt + 1, "pattern": pattern}
+                        chosen[blk] = asdict(crossing) | {"wt": number, "pattern": pattern}
                 elif crossing.status == "Pass" and state["status"] != "Fail":
                     state["status"] = "Pass"
-                elif crossing.status == "No Data" and state["status"] == "Pass":
-                    state["status"] = "No Data"
+                if crossing.status == "No Data":
+                    incomplete.add(blk)
+            die = self.die(wt, chip)
+            hard_at_wt = 0
+            if die and not self.phases[wt].fbc_error:
+                for test in self.config.hard:
+                    hard_at_wt |= die.masks.get(test.tno, 0)
             for b in range(BLKS):
                 addresses = {}
                 for name, scope in self.config.patterns.items():
@@ -678,25 +716,36 @@ class Wafer:
                             addresses[row["address"]] = row
                 state = states[b].get(wt)
                 if state:
+                    if hard_at_wt >> b & 1:
+                        state["status"] = "Fail"
+                    elif b in incomplete and state["status"] == "Pass":
+                        state["status"] = "No Data"
                     state["w"] = sum(bool(row["write"]) for row in addresses.values())
                     state["r"] = sum(bool(row["read"]) for row in addresses.values())
         return [{"blk": b, "trigger": chosen.get(b), "hard": b in hard,
-                 "states": [states[b].get(i, {"status": "No Data", "w": 0, "r": 0})
-                            for i in range(len(self.phases))]} for b in range(BLKS)]
+                 "states": [{"wt": number, **states[b].get(i, {"status": "No Data", "w": 0, "r": 0})}
+                            for i, number in enumerate(self.wt_numbers)]} for b in range(BLKS)]
 
     def detail(self, wt, chip, blk):
         die = self.die(wt, chip)
         scans = []
         diagnostics = [asdict(crossing) | {"pattern": name, "peak": peak}
-                       for name, b, crossing, peak, _ in self.crossings(wt, chip) if b == blk]
+                       for name, _, crossing, peak, _ in self.crossings(wt, chip, blk=blk)]
+        fbc90 = {name: asdict(crossing) | {"peak": peak}
+                 for name, _, crossing, peak, _ in self.crossings(wt, chip, blk=blk, mode="FBC90%")}
         state = {row["pattern"]: row["status"] for row in diagnostics}
         for pattern, scope in self.config.patterns.items():
+            judge = fbc90[pattern]
+            valid = judge["status"] in ("Pass", "Fail", "No Vmin")
+            cumulative = 0
             for t in scope:
                 values = die.fbc.get(t.tno) if die else None
+                fbc = values[blk] if values is not None else None
+                cumulative = max(cumulative, fbc or 0)
+                ratio = (cumulative / judge["peak"] if judge["peak"] else 0.0) if valid else None
                 scans.append({"pattern": pattern, "tno": t.tno, "func": t.name, "v": t.voltage,
-                              "fbc": values[blk] if values is not None else None,
-                              "state": state[pattern]})
-        return {"sweep": scans, "crossings": diagnostics,
+                              "fbc": fbc, "accumulated": ratio, "state": state[pattern]})
+        return {"sweep": scans, "crossings": diagnostics, "fbc90": fbc90,
                 "coverage": [self.audit_one(wt, name, chip, blk) for name in self.config.patterns
                              if isinstance((mask := self.fail_maps[wt, name, chip]), int) and mask >> blk & 1]}
 
@@ -704,7 +753,7 @@ class Wafer:
         for x, y in [chip] if chip is not None else self.chips:
             dies = [self.die(wt, (x, y)) for wt in range(len(self.phases))]
             blocks = set().union(*(d.addresses.keys() for d in dies if d))
-            category = self.cat(0, (x, y))
+            category = self.cat(0, (x, y)) if self.wt_numbers[0] == 1 else None
             for b in sorted(blocks):
                 groups = [d.addresses.get(b, {}) if d else {} for d in dies]
                 for addr in sorted(set().union(*groups)):
@@ -726,8 +775,8 @@ def load_wafer(sources, config, *, full=True, source_mode="full", report=lambda 
     if len({x.key for x in ordered}) != 1:
         raise ValueError("完整分析需選擇同一 Lot、同一 Wafer 的 1～3 份 ASC。")
     phase_data = []
-    for i, source in enumerate(ordered, 1):
-        report(f"讀取 WT{i} · {source.path.name}")
+    for wt, source in sorted(zip(phase_numbers(ordered), ordered), key=lambda phase: phase[0]):
+        report(f"讀取 WT{wt} · {source.path.name}")
         phase_data.append(read_asc(source, config, addresses=source_mode != "fbc",
                                    fbc=source_mode != "address", report=report))
     wafer = Wafer(config, tuple(phase_data), full, source_mode)
