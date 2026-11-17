@@ -350,7 +350,7 @@ async function refreshMap() {
   };
   if(dual){
     const pair=el('div',null,'wafer-vmin-pair');
-    const datasets=await Promise.all(dualPatterns.map(pattern=>api(params({view:'map',layer:'vmin_pattern',pattern}))));
+    const datasets=await Promise.all([...dualPatterns.map(pattern=>api(params({view:'map',layer:'vmin_pattern',pattern}))),api(params({view:'map',layer:'vmin_merge'}))]);
     if(id!==s.versions||s.page!=='maps')return;
     const allValues=datasets.flat();
     const commonScale=vminScale(allValues);
@@ -361,7 +361,7 @@ async function refreshMap() {
       [commonScale.color(commonScale.max),'High '+vfmt(commonScale.max)],
       ['#dbeafe','Pass'],['#e2e8f0','No Data / status']
     ]:[['#f3d86b','No valid Vmin']]);
-    for(const [i,pattern] of dualPatterns.entries()){
+    for(const [i,pattern] of [...dualPatterns,'Merge 90%'].entries()){
       const panel=el('section',null,'wafer-vmin-panel');
       panel.append(el('h3',pattern+' Vmin'));
       const map=el('div',null,'wafer');
@@ -578,9 +578,14 @@ function combinedAccumulation(details) {
   if(names.length!==2)return null;
   const article=el('div',null,'chart-content');
   const segments=names.map(name=>({name,result:details.fbc90[name],stations:details.sweep.filter(row=>row.pattern===name)}));
-  const usable=segments.filter(seg=>seg.stations.length&&seg.stations.every(st=>st.accumulated!==null));
+  const merged=details.merged_fbc90;
+  const allStations=segments.flatMap(seg=>seg.stations);
+  const peak=Math.max(0,...allStations.map(st=>st.fbc||0));
+  let running=0;
+  const mergedPoints=allStations.map(st=>{running=Math.max(running,st.fbc||0);return peak?running/peak*100:0;});
+  const usable=segments.filter(seg=>seg.stations.length&&seg.stations.every(st=>st.fbc!==null));
   const summary=el('p',null,'chart-summary');
-  summary.textContent=segments.map(seg=>seg.name+': '+(seg.result.voltage===null?seg.result.status:vfmt(seg.result.voltage)+' · TNO '+seg.result.tno)).join('  |  ');
+  summary.textContent='Merge 90%: '+(merged?.voltage==null?(merged?.status||'No Data'):vfmt(merged.voltage)+' · TNO '+merged.tno);
   article.append(summary);
   if(!usable.length){article.append(el('p','Scan／March 均無可用的 FBC90% 累積資料。','tab-note'));return article;}
   const count=segments.reduce((n,seg)=>n+seg.stations.length,0);
@@ -601,10 +606,10 @@ function combinedAccumulation(details) {
       const label=station.v===null?'—':vfmt(station.v).replace(/ V$/, 'v');
       const tickY=chart.bottom+9;
       chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'end',class:'chart-label chart-voltage-tick'},label);
-      if(station.accumulated!==null){
-        const pct=station.accumulated*100;
+      if(station.fbc!==null && merged?.status!=='No Data' && !['Hard Fail','Prior WT'].includes(merged?.status)){
+        const pct=mergedPoints[offset+i];
         points.push([x,chart.y(pct)]);
-        const hit=station.tno===seg.result.tno;
+        const hit=station.tno===merged?.tno;
         chartMark(chart,'circle',{cx:x,cy:chart.y(pct),r:hit?6:4,class:hit?'chart-crossing':'chart-point',fill:hit?'#9b422e':'#fff',stroke:colors[index]},seg.name+' · '+stationLabel(station)+' · '+pct.toFixed(1)+'%');
       }
     }
@@ -613,7 +618,7 @@ function combinedAccumulation(details) {
   }
   chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
   article.append(chart.wrap);
-  article.append(el('p','Scan／March 分段顯示；各 Pattern 的 FBC90% 累積比例獨立計算，不跨 Pattern 連線。','chart-note'));
+  article.append(el('p','Merge 90%：Scan → March 依 Config 順序共用最大 FBC 作為 100%，以截至目前的最大 FBC 計算比例；兩區段分別標示。','chart-note'));
   return article;
 }
 function countChart(label, unit, peak, width, height, xLabel) {
@@ -810,7 +815,12 @@ async function refreshDetail(fromMatrix=false) {
     addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses));
   };
   const combined=combinedAccumulation(details);
-  if(combined)body.append(section('Scan / March FBC90% Accumulation',combined));
+  if(combined){
+    for(const name of Object.keys(details.fbc90).filter(n=>['scan','march'].includes(n.toLowerCase()))){
+      body.append(section(name+' FBC90% Accumulation',accumulationChart(name,details.sweep.filter(r=>r.pattern===name),details.fbc90[name])));
+    }
+    body.append(section('Merge 90% FBC90% Accumulation',combined));
+  }
   if(Object.keys(details.fbc90).length){
     s.detailPattern=initialPattern;
     for(const name of Object.keys(details.fbc90))body.append(patternCharts(details,name,showTables));
