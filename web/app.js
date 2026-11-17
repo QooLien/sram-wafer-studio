@@ -510,30 +510,35 @@ function chartLegend(labels, colors) {
 }
 function voltageDistribution(comparison) {
   const {groups,series,combined,title,incomplete}=comparison;
-  if (!series.length) return el('p','No stations with both voltage and FBC data.','tab-note');
+  if (!series.length || !groups.length) return el('p','No stations with both voltage and FBC data.','tab-note');
   const article=el('div',null,'chart-content');
   article.append(chartLegend(series.map(item=>item.label),series.map(item=>item.color)));
-  const groupWidth=Math.max(65,...groups.map(group=>group.stations.length*15+14));
-  const width=Math.max(560,groups.length*groupWidth+108);
+  // One compact slot per Config station: never merge repeated voltages or separate patterns.
+  const slotWidth=34;
+  const width=Math.max(560,groups.length*slotWidth+116);
   const peak=Math.max(...groups.flatMap(group=>group.stations.map(row=>row.fbc)));
-  const chart=countChart(title,'FBC',peak,width,undefined,'Test Voltage / TNO · Config order');
+  const chart=countChart(title,'FBC',peak,width,370,'Voltage (V)');
   const stride=(chart.right-chart.left)/groups.length;
   for (const [index,group] of groups.entries()) {
     const mid=chart.left+(index+.5)*stride;
-    const slot=Math.min(20,(stride-12)/Math.max(1,group.stations.length));
-    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(group.voltage).slice(0,-2)+' / '+group.tno);
+    const label=vfmt(group.voltage).slice(0,-2);
+    chart.add('text',{x:mid,y:chart.bottom+12,transform:'rotate(90 '+mid+' '+(chart.bottom+12)+')',
+      'text-anchor':'start',class:'chart-label'},label);
+    const barWidth=Math.max(4,Math.min(25,stride-5));
     for (const [i,station] of group.stations.entries()) {
       const height=chart.bottom-chart.y(station.fbc);
       const item=series[station.series];
       const description=(combined?item.pattern+' · ':'')+stationLabel(station);
-      chartMark(chart,'rect',{x:mid+(i-group.stations.length/2)*slot+1,y:chart.bottom-Math.max(2,height),
-        width:slot-2,height:Math.max(2,height),class:'chart-bar',fill:item.color},description);
+      const part=barWidth/group.stations.length;
+      chartMark(chart,'rect',{x:mid-barWidth/2+i*part+1,y:chart.bottom-Math.max(2,height),
+        width:Math.max(2,part-2),height:Math.max(2,height),class:'chart-bar',fill:item.color},description);
     }
   }
   article.append(chart.wrap);
   if (incomplete)article.append(el('p','Only stations with recorded voltage and FBC are plotted.','chart-note'));
   return article;
 }
+
 function wrMatchDistribution(pattern, groups, labels) {
   const article=el('div',null,'chart-content');
   const colors=['#35638a','#ce8653','#725b83','#d7dce3'];
