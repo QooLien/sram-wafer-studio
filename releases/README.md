@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.0.zip](SRAM%20Analysis%20Tool%20v1.8.0.zip)
+[下載 SRAM Analysis Tool v1.8.1.zip](SRAM%20Analysis%20Tool%20v1.8.1.zip)
 
-v1.8.0 更新 256 BLK Vmin 分布。依 WT 與 Vmin 範圍顯示各 BLK 的電壓，分別標記 Tail 和 Judge BLK。矩陣可選擇顯示 R/W 四宮格計數。新增獨立的 W/R Monitor Correlation 報表，比較 Scan、March 與 Scan & March，並提供 Excel 匯出。
+v1.8.1 每顆 Chip 新增 FBC90% Vmin 箱型圖與 16 × 16 離群位置圖。Tail 採 FBC90% Vmin 四分位上界與實際電壓階數，並列排除 Tail 前的最高 Vmin 與排除後的 Judge Vmin。
 
 保留版本：
 
+- [v1.8.0](SRAM%20Analysis%20Tool%20v1.8.0.zip)
 - [v1.7.16](SRAM%20Analysis%20Tool%20v1.7.16.zip)
 
 - [v1.7.15](SRAM%20Analysis%20Tool%20v1.7.15.zip)

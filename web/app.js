@@ -277,7 +277,7 @@ function showChip(row) {
   const fields=[['WT','WT'+s.wt],['狀態',row.status]];
   if(s.layer === 'vmin'){
     fields.push(['判定來源',s.vminJudge?.source??'Chip Vmin'],['Vmin',vminfmt(row,row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
-      ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail 門檻',row.cutoff==null?'—':Number(row.cutoff).toFixed(2)],
+      ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail 上界',row.cutoff==null?'—':vfmt(row.cutoff)],['包含 Tail 的最高 Vmin',vminfmt(row.before_tail)],
       ['剩餘／資料不足',row.remaining+'／'+row.incomplete]);
   } else if(row.wr){
     fields.push(['Fail BLK',row.value ?? '—'],['Loss BLK',row.loss],
@@ -434,12 +434,12 @@ function renderTailList(tails) {
   const details=$('dist-tails');
   details.hidden=!tails.length;
   $('dist-tails-label').textContent='Tail BLKs ('+tails.length+')';
-  const sorted=[...tails].sort((a,b)=>(b.voltage??-Infinity)-(a.voltage??-Infinity)||b.peak_fbc-a.peak_fbc||a.blk-b.blk);
+  const sorted=[...tails].sort((a,b)=>b.fbc90_voltage-a.fbc90_voltage||a.blk-b.blk);
   const buttons=sorted.map(entry=>{
     const button=el('button',null,'tail-list-item');
     button.append(el('strong','BLK '+entry.blk),
-      el('span',entry.voltage==null?entry.status:vminfmt(entry)),
-      el('span','Peak FBC '+nfmt.format(entry.peak_fbc)));
+      el('span','FBC90% '+vfmt(entry.fbc90_voltage)),
+      el('span',entry.steps_above_median+' voltage steps above median'));
     button.onclick=()=>$('blk-grid').children[entry.blk]?.click();
     return button;
   });
@@ -453,19 +453,21 @@ async function refreshDistribution() {
   const matches=s.report.source_mode==='full'&&$('dist-match').checked;
   const data=await api(params({view:'vmin_distribution',scope,matches:matches?'1':'0',...selection()}));
   if(id!==s.distributionVersion||wt!==s.wt||chip!==s.selected||scope!==$('dist-scope').value||s.page!=='maps')return;
-  const {summary,mode,entries}=data;
+  const {summary,mode,entries,box}=data;
   s.distribution=entries;
   const source=$('dist-scope').selectedOptions[0].textContent;
-  const judge=summary.blk==null ? summary.status :
+  const judge=summary.blk==null ? 'Judge: '+summary.status :
     'Judge BLK '+summary.blk+' · '+vminfmt(summary)+' · TNO '+summary.tno;
-  $('dist-judge').textContent=['WT'+wt,source,mode,judge,'Tail BLKs: '+summary.tail.length,
-    ...(summary.cutoff==null?[]:['Peak FBC cutoff: '+nfmt.format(summary.cutoff)])].join(' · ');
+  const before=summary.before_tail;
+  const highest=before.blk==null?'Highest before Tail: —':
+    'Highest before Tail: '+vminfmt(before)+' (BLK '+before.blk+')';
+  $('dist-judge').textContent=['WT'+wt,source,mode,highest,judge,'Tail BLKs: '+summary.tail.length].join(' · ');
   const note=$('dist-note');
   note.textContent=summary.reason??'';
   note.hidden=!summary.reason;
   const board=$('blk-grid');
   board.classList.toggle('show-match',matches);
-  $('dist-match-legend').hidden=!matches;
+  setDistributionView($('dist-view-outliers').getAttribute('aria-pressed')==='true');
   const cells=board.children;
   for(const entry of entries){
     const tile=cells[entry.blk];
@@ -498,11 +500,14 @@ async function refreshDistribution() {
       entry.judge?'Judge BLK':entry.tail?'Tail BLK · excluded from Chip Vmin':'',
       entry.tno==null?'':'TNO '+entry.tno+' · '+entry.func,
       entry.peak_fbc?'Peak FBC '+nfmt.format(entry.peak_fbc):'',
+      entry.fbc90_voltage==null?'':'FBC90% '+vminfmt({relation:entry.fbc90_relation},entry.fbc90_voltage),
+      entry.steps_above_median==null?'':entry.steps_above_median+' voltage steps above median',
       ...(matches?entry.matches.map((count,index)=>matchLabels[index]+': '+nfmt.format(count)):[]),
       ...s.blocks[entry.blk].states.map(phase=>'WT'+phase.wt+' '+phase.status)].filter(Boolean).join(' · ');
     tile.title=title;
     tile.setAttribute('aria-label',title);
   }
+  renderVminOutliers(box,entries);
   renderTailList(entries.filter(entry=>entry.tail));
   fitMapStage();
 }
@@ -511,6 +516,93 @@ $('dist-scope').onchange=safe(()=>{
   return refreshDistribution();
 });
 $('dist-match').onchange=safe(refreshDistribution);
+
+function setDistributionView(showOutliers) {
+  $('dist-outliers').hidden=!showOutliers;
+  $('dist-matrix').hidden=showOutliers;
+  $('dist-legend').hidden=showOutliers;
+  $('dist-wts').hidden=showOutliers;
+  $('dist-match-label').hidden=showOutliers||s.report?.source_mode!=='full';
+  $('dist-match-legend').hidden=showOutliers||s.report?.source_mode!=='full'||!$('dist-match').checked;
+  for(const [id,active] of [['dist-view-matrix',!showOutliers],['dist-view-outliers',showOutliers]]){
+    $(id).setAttribute('aria-pressed',active);
+    $(id).classList.toggle('active',active);
+  }
+  fitMapStage();
+}
+$('dist-view-matrix').onclick=()=>setDistributionView(false);
+$('dist-view-outliers').onclick=()=>setDistributionView(true);
+
+function vminBoxPlot(box,exact) {
+  if(!exact.length)return el('p','No exact FBC90% Vmin readings for this Chip, WT and scope.','correlation-note');
+  const bottom=Math.min(...exact.map(entry=>entry.fbc90_voltage));
+  const top=Math.max(box.upper_fence??bottom,...exact.map(entry=>entry.fbc90_voltage));
+  const padding=Math.max(.004,(top-bottom)*.10);
+  const base=bottom-padding, span=top+padding-base;
+  const ticks=Array.from({length:5},(_,i)=>span*i/4);
+  const chart=chartFrame('FBC90% Vmin box plot','Vmin (V)',span,ticks,530,
+    offset=>Number((base+offset).toFixed(4)).toString(),335,'Exact FBC90% readings');
+  const y=v=>chart.y(v-base);
+  const boxX=chart.left+(chart.right-chart.left)*.30;
+  const pointsX=chart.left+(chart.right-chart.left)*.73;
+  if(box.upper_fence!=null){
+    chart.add('line',{x1:chart.left,x2:chart.right,y1:y(box.upper_fence),y2:y(box.upper_fence),
+      stroke:'#a74c0b','stroke-width':1.5,'stroke-dasharray':'5 4'});
+  }
+  chart.add('line',{x1:boxX,x2:boxX,y1:y(box.high),y2:y(box.low),stroke:'#35638c','stroke-width':2});
+  for(const v of [box.low,box.high]){
+    chart.add('line',{x1:boxX-17,x2:boxX+17,y1:y(v),y2:y(v),stroke:'#35638c','stroke-width':2});
+  }
+  chart.add('rect',{x:boxX-34,y:y(box.q3),width:68,height:Math.max(1,y(box.q1)-y(box.q3)),
+    fill:'#dfeafb',stroke:'#35638c','stroke-width':1.3});
+  chart.add('line',{x1:boxX-34,x2:boxX+34,y1:y(box.median),y2:y(box.median),stroke:'#15685d','stroke-width':3});
+  for(const entry of [...exact].sort((a,b)=>Number(a.tail)-Number(b.tail))){
+    const attrs={cx:pointsX+(entry.blk%13-6)*6,cy:y(entry.fbc90_voltage),
+      r:entry.tail?5:entry.steps_above_median!=null?4:2.8,fill:entry.tail?'#ad4d0d':entry.steps_above_median!=null?'#d89726':entry.below_fence?'#007b77':'#587c9f',
+      'fill-opacity':entry.steps_above_median!=null||entry.below_fence?1:.48};
+    const title='BLK '+entry.blk+' · '+vfmt(entry.fbc90_voltage);
+    const mark=chart.add('circle',attrs);
+    chart.add('title',{},title,mark);
+  }
+  return chart.wrap;
+}
+
+function renderVminOutliers(box,entries) {
+  const exact=entries.filter(e=>e.fbc90_voltage!=null&&!e.fbc90_relation);
+  const count=box.count;
+  const values=count?[['Q1',box.q1],['Median',box.median],['Q3',box.q3],['Upper fence',box.upper_fence]]:[];
+  const stats=el('p','Exact FBC90% readings: '+count+' / 256'+
+    (values.length?' · '+values.map(([label,v])=>label+' '+vfmt(v)).join(' · '):''),'vmin-stats');
+  const left=section('FBC90% Vmin Box Plot',vminBoxPlot(box,exact));
+  const right=el('section',null,'detail-section vmin-location');
+  right.append(el('h3','BLK Outlier Locations'));
+  const key=chartLegend(['Tail','Above upper fence only','Below lower fence','Exact Vmin','Other status'],['#cd641e','#ffd993','#b3dfde','#dce9f6','#edf0f3']);
+  right.append(key);
+  const board=el('div',null,'outlier-grid');
+  for(const entry of entries){
+    const cls=entry.tail?'tail':entry.steps_above_median!=null?'high':entry.below_fence?'low':entry.fbc90_voltage!=null&&!entry.fbc90_relation?'exact':'other';
+    const cell=el('button',String(entry.blk),'outlier-block '+cls);
+    cell.type='button';
+    cell.style.gridRow=entry.blk%16+1;
+    cell.style.gridColumn=Math.floor(entry.blk/16)+1;
+    cell.classList.toggle('judge',entry.judge);
+    const detail=entry.fbc90_voltage==null?entry.status:vminfmt({relation:entry.fbc90_relation},entry.fbc90_voltage);
+    cell.title='BLK '+entry.blk+' · '+detail+(entry.tail?' · Tail':entry.steps_above_median!=null?' · Above upper fence':entry.below_fence?' · Below lower fence':'')+(entry.judge?' · Judge BLK':'');
+    cell.setAttribute('aria-label',cell.title);
+    cell.onclick=()=>$('blk-grid').children[entry.blk]?.click();
+    board.append(cell);
+  }
+  const scroller=el('div',null,'outlier-grid-scroll');
+  scroller.append(board);
+  right.append(scroller);
+  const grid=el('div',null,'vmin-stat-plots pattern-charts');
+  grid.append(left,right);
+  const notes=count<box.minimum_samples
+    ? 'At least '+box.minimum_samples+' exact Vmin readings are required to classify Tail BLKs.'
+    : 'Tail requires Vmin above the upper fence and at least '+box.minimum_steps+' tested voltage steps above the median.';
+  put('dist-outliers',stats,grid,el('p',notes+' Pass, missing and lower-bound values are excluded from quartiles. Purple outline marks the Judge BLK.','correlation-note'));
+}
+
 
 async function refreshGrid() {
   const id=++s.gridVersion;

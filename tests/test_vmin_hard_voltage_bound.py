@@ -69,14 +69,17 @@ class TestHardVoltageBound(unittest.TestCase):
         w.phases = (*w.phases, second)
         self.assertEqual(next(w.crossings(1, (0, 0), blk=0))[2].status, "Prior WT")
 
-    def test_tail_bound_is_not_a_chip_candidate(self):
+    def test_bound_is_kept_out_of_box_statistics(self):
         w = make_wafer(first=1000, second=1000)
         die = w.die(0, (0, 0))
         die.fbc[205][1:5] = array("Q", [1] * 4)
         die.masks[205] = 31
         result = w.chip_vmin(0, (0, 0))
-        self.assertIn(0, result["tail"])
-        self.assertEqual((result["voltage"], result["relation"], result["blk"]), (1.035, "", 1))
+        self.assertNotIn(0, result["tail"])
+        self.assertEqual((result["voltage"], result["relation"], result["blk"]), (1.2, ">=", 0))
+        distribution = w.vmin_distribution(0, (0, 0))
+        self.assertEqual(distribution["box"]["count"], 4)
+        self.assertEqual(distribution["entries"][0]["fbc90_relation"], ">=")
 
 
 if __name__ == "__main__":

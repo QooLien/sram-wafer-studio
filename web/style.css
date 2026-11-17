@@ -215,3 +215,21 @@ text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
 .map-layout.vmin-layout{grid-template-columns:minmax(0,1fr)}
 .vmin-layout .map-inspector{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .wafer-vmin-panel h3{font-weight:600;line-height:1.4;margin:2px 0 12px}
+
+.dist-view-controls{flex-basis:100%}
+.vmin-outliers{padding:4px 14px 14px}
+.vmin-stats{padding:5px 3px 10px;font-weight:650;color:var(--ink)}
+.vmin-stat-plots{display:grid;grid-template-columns: minmax(0, 1fr) minmax(0, 1.26fr);gap:12px}
+.vmin-stat-plots .detail-section{background:#fff}
+.vmin-stat-plots .plot svg{min-width:0!important}
+.vmin-location .chart-legend{padding:0 11px 5px}
+.outlier-grid-scroll{padding:5px 10px 10px;overflow:auto}
+.outlier-grid{display:grid;grid-template-columns:repeat(16,minmax(21px,1fr));grid-template-rows:repeat(16,20px);gap:2px;min-width:366px}
+.outlier-block{min-width:0;display:grid;place-items:center;font:650 10px/1 "Segoe UI",sans-serif;padding:0;border:1px solid #ccd7e1;border-radius:2px;background:#edf0f3;color:#4d6071}
+.outlier-block.exact{background:#dce9f6;color:#233d56}
+.outlier-block.low{background:#b3dfde;color:#135b59}
+.outlier-block.high{background:#ffd993;color:#633a09}
+.outlier-block.tail{background:#cd641e;color:#fff;font-weight:800}
+.outlier-block.judge{border:2px solid #7c3aed}
+.outlier-block:hover,.outlier-block:focus-visible{outline:2px solid var(--accent);outline-offset:0;z-index:1}
+@media(max-width:1060px){.vmin-stat-plots{grid-template-columns:minmax(0,1fr)}}

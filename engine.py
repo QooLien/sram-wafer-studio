@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from array import array
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from functools import cached_property
@@ -430,17 +431,49 @@ def vmin(scope, values, mode, *, hard_voltage=None):
     return Crossing(None, None, None, None, "No Data" if missing else ("Below" if peak else "Pass"))
 
 
-def tail_cutoff(values):
-    values = sorted(v for v in values if v > 0)
-    if len(values) < 4:
-        return None
+def voltage_distribution(readings, voltage_ladders):
+    """Box statistics for exact FBC90% Vmin and high-side Tail candidates."""
+    exact = {blk: crossing.voltage for blk, (_, crossing) in readings.items()
+             if crossing.voltage is not None and not crossing.relation}
+    values = sorted(exact.values())
+    stats = {"count": len(values), "minimum_samples": 4, "minimum_steps": 2}
+    if not values:
+        return stats, {}, []
 
     def quartile(n):
         i, fraction = divmod((len(values) - 1) * n, 4)
-        return values[i] + fraction * (values[min(i + 1, len(values) - 1)] - values[i]) / 4
+        return round(values[i] + fraction * (values[min(i + 1, len(values) - 1)] - values[i]) / 4, 12)
 
-    q1, q3 = quartile(1), quartile(3)
-    return q3 + 1.5 * (q3 - q1)
+    q1, median, q3 = (quartile(n) for n in (1, 2, 3))
+    stats.update(q1=q1, median=median, q3=q3, low=values[0], high=values[-1])
+    if len(values) < stats["minimum_samples"]:
+        return stats, {}, []
+    iqr = q3 - q1
+    lower, upper = round(q1 - 1.5 * iqr, 12), round(q3 + 1.5 * iqr, 12)
+    ladders = {name: sorted({v for v in voltages if v is not None})
+               for name, voltages in voltage_ladders.items()}
+    outliers = {}
+    for blk, voltage in exact.items():
+        if voltage > upper:
+            ladder = ladders.get(readings[blk][0], ladders.get(None, ()))
+            outliers[blk] = bisect_right(ladder, voltage) - bisect_right(ladder, median)
+    tail = [blk for blk, steps in sorted(outliers.items()) if steps >= stats["minimum_steps"]]
+    stats.update(lower_fence=lower, upper_fence=upper,
+                 low=next(v for v in values if v >= lower),
+                 high=next(v for v in reversed(values) if v <= upper))
+    return stats, outliers, tail
+
+
+def select_vmin(readings, tail=()):
+    excluded = set(tail)
+    candidates = (blk for blk, (_, crossing) in readings.items()
+                  if blk not in excluded and crossing.voltage is not None)
+    blk = max(candidates, key=lambda b: (readings[b][1].voltage, readings[b][1].relation == ">=", -b),
+              default=None)
+    pattern, crossing = readings[blk] if blk is not None else (None, None)
+    return {"blk": blk, "pattern": pattern, "voltage": crossing.voltage if crossing else None,
+            "tno": crossing.tno if crossing else None, "func": crossing.func if crossing else None,
+            "relation": crossing.relation if crossing else ""}
 
 
 def observed_category(write, read):
@@ -690,38 +723,45 @@ class Wafer:
     def chip_vmin(self, wt, chip):
         return self._chip_vmin_data(wt, chip)[0]
 
-    def _chip_vmin_data(self, wt, chip):
-        hard, past, _ = self.eligibility(wt, chip)
+    def _chip_crossings(self, wt, chip, mode):
         peaks, unknown, best = [0] * BLKS, set(), {}
-        for name, b, crossing, peak, complete in self.crossings(wt, chip):
+        for name, blk, crossing, peak, complete in self.crossings(wt, chip, mode=mode):
             if crossing.status in ("Hard Fail", "Prior WT", "Prior Pattern"):
                 continue
             if not complete:
-                unknown.add(b)
-            peaks[b] = max(peaks[b], peak)
-            old = best.get(b)
-            if crossing.voltage is not None and (old is None or old[1].voltage is None or (crossing.voltage, crossing.relation == ">=") > (old[1].voltage, old[1].relation == ">=")):
-                best[b] = name, crossing
+                unknown.add(blk)
+            peaks[blk] = max(peaks[blk], peak)
+            previous = best.get(blk)
+            old = previous[1] if previous else None
+            if crossing.voltage is not None and (old is None or old.voltage is None or
+                    (crossing.voltage, crossing.relation == ">=") > (old.voltage, old.relation == ">=")):
+                best[blk] = name, crossing
             elif crossing.status == "No Vmin" and old is None:
-                best[b] = name, crossing
-        pool = [b for b in range(BLKS) if not ((hard | past) >> b & 1)]
-        cutoff = tail_cutoff(peaks[b] for b in pool if b not in unknown)
-        tail = [b for b in pool if cutoff is not None and b not in unknown and peaks[b] > cutoff]
-        tail_set = set(tail)
-        kept = [b for b in pool if b not in tail_set]
-        valid = [b for b in kept if b in best and best[b][1].voltage is not None]
-        winner = max(valid, key=lambda b: (best[b][1].voltage, best[b][1].relation == ">=", -b), default=None)
+                best[blk] = name, crossing
+        return best, peaks, unknown
+
+    def _chip_vmin_data(self, wt, chip):
+        hard, past, _ = self.eligibility(wt, chip)
+        readings, peaks, unknown = self._chip_crossings(wt, chip, self.config.mode)
+        fbc90, _, fbc90_unknown = ((readings, peaks, unknown) if self.config.mode == "FBC90%"
+                                  else self._chip_crossings(wt, chip, "FBC90%"))
+        # An incomplete Pattern cannot establish a chip-wide maximum for this BLK.
+        fbc90 = {blk: hit for blk, hit in fbc90.items() if blk not in fbc90_unknown}
+        ladders = {name: tuple(test.voltage for test in tests)
+                   for name, tests in self.config.patterns.items()}
+        stats, outliers, tail = voltage_distribution(fbc90, ladders)
+        pool = [blk for blk in range(BLKS) if not ((hard | past) >> blk & 1)]
+        kept = set(pool).difference(tail)
+        selected = select_vmin(readings, tail)
         incomplete = len(unknown.intersection(kept))
-        status = ("Vmin" if winner is not None else "No BLK" if not kept else "No Data" if incomplete
-                  else "No Vmin" if any(b in best for b in kept) else "Below" if any(peaks[b] for b in kept)
-                  else "Pass")
-        pattern, result = best[winner] if winner is not None else (None, None)
-        summary = {"status": status, "voltage": result.voltage if result else None, "blk": winner,
-                   "tno": result.tno if result else None, "func": result.func if result else None,
-                   "relation": result.relation if result else "", "pattern": pattern, "cutoff": cutoff,
-                   "tail": tail, "hard": list(bits(hard)), "prior": past.bit_count(),
-                   "remaining": len(kept), "incomplete": incomplete}
-        return summary, best, peaks, unknown, past
+        status = ("Vmin" if selected["blk"] is not None else "No BLK" if not kept
+                  else "No Data" if incomplete else "No Vmin" if any(b in readings for b in kept)
+                  else "Below" if any(peaks[b] for b in kept) else "Pass")
+        summary = selected | {"status": status, "cutoff": stats.get("upper_fence"),
+                              "tail": tail, "hard": list(bits(hard)), "prior": past.bit_count(),
+                              "remaining": len(kept), "incomplete": incomplete,
+                              "before_tail": select_vmin(readings)}
+        return summary, readings, peaks, unknown, past, fbc90, stats, outliers
 
     @cached_property
     def monitor_tnos(self):
@@ -808,30 +848,16 @@ class Wafer:
                 "rows": rows, "counts": totals, "relationships": relationships}
 
     def vmin_distribution(self, wt, chip, scope="chip", *, with_matches=False):
-        """Expose BLK readings before Tail exclusion beside the actual map Judge."""
-        aggregate, best, peaks, unknown, past = self._chip_vmin_data(wt, chip)
-        excluded_tails = set(aggregate["tail"])
-        hard = set(aggregate["hard"])
-        mode = self.config.mode
+        """Expose the exact FBC90% readings and the actual map Judge for the selected scope."""
+        mode = self.config.mode if scope == "chip" else "FBC90%"
         if scope == "chip":
-            summary = aggregate
-            readings = best
-        elif scope == "merge":
-            mode = "FBC90%"
-            summary = self.merged_chip_vmin(wt, chip)
-            merge_scope = {test.tno: name for name, tests in self.config.patterns.items()
-                           if name.casefold() in ("scan", "march") for test in tests}
-            readings = {}
-            for blk in range(BLKS):
-                crossing = self.merged_fbc90(wt, chip, blk)
-                readings[blk] = merge_scope.get(crossing.tno), crossing
+            summary, readings, peaks, unknown, past, fbc90, stats, outliers = self._chip_vmin_data(wt, chip)
         else:
-            mode = "FBC90%"
-            pattern = scope.removeprefix("pattern:")
-            summary = self.pattern_chip_vmin(wt, chip, pattern)
-            readings = {blk: (name, crossing)
-                        for name, blk, crossing, _, _ in self.crossings(wt, chip, mode=mode)
-                        if name == pattern}
+            summary, readings, peaks, stats, outliers = self._pattern_vmin_data(wt, chip, scope)
+            fbc90 = readings
+            unknown, past = set(), 0
+        hard = set(summary["hard"])
+        tails = set(summary["tail"])
         entries = []
         for blk in range(BLKS):
             reading = readings.get(blk)
@@ -840,15 +866,22 @@ class Wafer:
                           else "No Data" if blk in unknown else "Below" if peaks[blk] else "Pass")
                 reading = None, Crossing(None, None, None, None, status)
             pattern, crossing = reading
+            voltage90 = fbc90.get(blk)
             entries.append(asdict(crossing) | {
                 "blk": blk, "pattern": pattern, "peak_fbc": peaks[blk],
-                "tail": blk in excluded_tails, "judge": blk == summary["blk"],
+                "tail": blk in tails, "judge": blk == summary["blk"],
+                "fbc90_voltage": voltage90[1].voltage if voltage90 else None,
+                "fbc90_relation": voltage90[1].relation if voltage90 else "",
+                "steps_above_median": outliers.get(blk),
+                "below_fence": bool(voltage90 and voltage90[1].voltage is not None
+                                    and not voltage90[1].relation and "lower_fence" in stats
+                                    and voltage90[1].voltage < stats["lower_fence"]),
             })
         if with_matches and self.source_mode == "full":
             matches, _, _, _ = self.block_monitor_matches(wt, chip, self.monitor_patterns(scope))
             for entry in entries:
                 entry["matches"] = matches.get(entry["blk"], [0] * len(MATCH_LABELS))
-        return {"summary": summary, "mode": mode, "entries": entries}
+        return {"summary": summary, "mode": mode, "entries": entries, "box": stats}
 
     def pattern_fbc_summary(self, wt, chip, pattern):
         """Classify a Chip from all raw 256-BLK FBC vectors, never captured addresses."""
@@ -885,73 +918,72 @@ class Wafer:
         return "", ""
 
     def pattern_chip_vmin(self, wt, chip, pattern):
-        """Per-pattern worst eligible BLK Vmin, using the existing chip Tail filter."""
-        aggregate = self.chip_vmin(wt, chip)
-        tail = set(aggregate["tail"])
-        gate_status, reason = self.pattern_vmin_eligibility(wt, chip, pattern)
-        if gate_status:
-            return {"status": gate_status, "reason": reason, "voltage": None, "value": None,
-                    "blk": None, "tno": None, "func": None, "relation": "", "pattern": pattern,
-                    "tail": aggregate["tail"], "hard": aggregate["hard"], "cutoff": aggregate["cutoff"],
-                    "remaining": aggregate["remaining"], "incomplete": aggregate["incomplete"]}
-        rows = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip, mode="FBC90%")
-                if name == pattern and blk not in tail]
-        candidates = [(blk, crossing) for blk, crossing in rows if crossing.voltage is not None]
-        winner = max(candidates, key=lambda item: (item[1].voltage, item[1].relation == ">=", -item[0]), default=None)
-        if winner is None:
-            eligible = [crossing for _, crossing in rows
-                        if crossing.status not in ("Hard Fail", "Prior WT", "Prior Pattern")]
-            status = "No BLK" if not eligible else "No Data" if any(c.status == "No Data" for c in eligible) else "No Vmin"
-            return {"status": status, "reason": "No eligible BLK with a valid Vmin after exclusions.",
-                    "voltage": None, "value": None, "blk": None,
-                    "tno": None, "func": None, "relation": "", "pattern": pattern,
-                    "tail": aggregate["tail"], "hard": aggregate["hard"],
-                    "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
-                    "incomplete": aggregate["incomplete"]}
-        blk, crossing = winner
-        return {"status": "Vmin", "voltage": crossing.voltage, "value": crossing.voltage,
-                "blk": blk, "tno": crossing.tno, "func": crossing.func, "relation": crossing.relation, "pattern": pattern,
-                "tail": aggregate["tail"], "hard": aggregate["hard"],
-                "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
-                "incomplete": aggregate["incomplete"]}
+        return self._pattern_vmin_data(wt, chip, "pattern:" + pattern)[0]
+
+    def _pattern_vmin_data(self, wt, chip, scope):
+        hard, past, _ = self.eligibility(wt, chip)
+        peaks = [0] * BLKS
+        names = self.monitor_patterns(scope)
+        voltages = (test.voltage for name in names for test in self.config.patterns[name])
+        if scope == "merge":
+            pattern, gate_status, reason = "Merge 90%", "", ""
+            by_tno = {test.tno: name for name in names for test in self.config.patterns[name]}
+            readings = {}
+            for blk, crossing, peak in self._merged_fbc90_rows(wt, chip, range(BLKS)):
+                readings[blk] = by_tno.get(crossing.tno), crossing
+                peaks[blk] = peak
+        else:
+            pattern = names[0]
+            gate_status, reason = self.pattern_vmin_eligibility(wt, chip, pattern)
+            readings = {}
+            for name, blk, crossing, peak, _ in self.crossings(wt, chip, mode="FBC90%"):
+                if name == pattern:
+                    readings[blk] = name, crossing
+                    peaks[blk] = peak
+
+        stats, outliers, tail = voltage_distribution(readings, {None: voltages})
+        selected = select_vmin({} if gate_status else readings, tail)
+        before_tail = select_vmin({} if gate_status else readings)
+        kept = [crossing for blk, (_, crossing) in readings.items() if blk not in tail
+                and crossing.status not in ("Hard Fail", "Prior WT", "Prior Pattern")]
+        incomplete = sum(c.status == "No Data" for c in kept)
+        if scope == "merge":
+            status = "Vmin" if selected["blk"] is not None else "No Vmin"
+        else:
+            status = (gate_status or ("Vmin" if selected["blk"] is not None else "No BLK" if not kept
+                      else "No Data" if incomplete else "No Vmin"))
+            if not reason and selected["blk"] is None:
+                reason = "No eligible BLK with a valid Vmin after exclusions."
+        summary = selected | {"value": selected["voltage"], "status": status, "reason": reason,
+                              "pattern": pattern, "cutoff": stats.get("upper_fence"), "tail": tail,
+                              "hard": list(bits(hard)), "prior": past.bit_count(),
+                              "remaining": len(kept), "incomplete": incomplete, "before_tail": before_tail}
+        return summary, readings, peaks, stats, outliers
 
     def merged_fbc90(self, wt, chip, blk):
-        """One 90% crossing over Scan then March in Config order (shared peak)."""
-        names = [name for name in self.config.patterns if name.casefold() in ("scan", "march")]
-        if len(names) != 2:
-            return Crossing(None, None, None, None, "No Data")
+        return next(self._merged_fbc90_rows(wt, chip, (blk,)))[1]
+
+    def _merged_fbc90_rows(self, wt, chip, blocks):
+        """One 90% crossing over Scan and March in Config order (shared peak)."""
+        names = self.monitor_patterns("merge")
         hard, past, complete = self.eligibility(wt, chip)
-        if hard >> blk & 1:
-            return Crossing(None, None, None, None, "Hard Fail")
-        if past >> blk & 1:
-            return Crossing(None, None, None, None, "Prior WT")
         phase = self.phases[wt]
         die = phase.chips.get(chip, ChipData())
-        if not complete or phase.fbc_error or any(die.masks.get(self.config.patterns[name][-1].tno) is None for name in names):
-            return Crossing(None, None, None, None, "No Data")
         scope = [test for name in names for test in self.config.patterns[name]]
-        values = [die.fbc[test.tno][blk] if test.tno in die.fbc else None for test in scope]
-        return vmin(scope, values, "FBC90%", hard_voltage=self.config.hard_voltage)
+        vectors = [die.fbc.get(test.tno) for test in scope]
+        available = (len(names) == 2 and complete and not phase.fbc_error
+                     and all(vector is not None for vector in vectors))
+        for blk in blocks:
+            state = ("No Data" if len(names) != 2 else "Hard Fail" if hard >> blk & 1
+                     else "Prior WT" if past >> blk & 1 else "" if available else "No Data")
+            if state:
+                yield blk, Crossing(None, None, None, None, state), 0
+            else:
+                values = [vector[blk] for vector in vectors]
+                yield blk, vmin(scope, values, "FBC90%", hard_voltage=self.config.hard_voltage), max(values)
 
     def merged_chip_vmin(self, wt, chip):
-        aggregate = self.chip_vmin(wt, chip)
-        tail = set(aggregate["tail"])
-        hard, past, _ = self.eligibility(wt, chip)
-        candidates = [(blk, result) for blk in range(BLKS)
-                      if blk not in tail and not ((hard | past) >> blk & 1)
-                      for result in [self.merged_fbc90(wt, chip, blk)]
-                      if result.voltage is not None]
-        winner = max(candidates, key=lambda item: (item[1].voltage, item[1].relation == ">=", -item[0]), default=None)
-        result = {"status": "Vmin" if winner else "No Vmin",
-                  "voltage": winner[1].voltage if winner else None,
-                  "blk": winner[0] if winner else None,
-                  "tno": winner[1].tno if winner else None,
-                  "func": winner[1].func if winner else None,
-                  "relation": winner[1].relation if winner else "", "pattern": "Merge 90%", "tail": aggregate["tail"],
-                  "hard": aggregate["hard"], "cutoff": aggregate["cutoff"],
-                  "remaining": aggregate["remaining"], "incomplete": aggregate["incomplete"]}
-        result["value"] = result["voltage"]
-        return result
+        return self._pattern_vmin_data(wt, chip, "merge")[0]
 
     @cached_property
     def all_vmin(self):

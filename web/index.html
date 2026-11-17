@@ -65,13 +65,18 @@
           <label>Vmin scope <select id="dist-scope"></select></label>
           <label id="dist-match-label"><input id="dist-match" type="checkbox"> Show R/W Match Count</label>
         </div>
+        <div class="chips dist-view-controls" aria-label="BLK distribution view">
+          <button id="dist-view-matrix" class="active" type="button" aria-pressed="true">BLK Matrix</button>
+          <button id="dist-view-outliers" type="button" aria-pressed="false">Box Plot &amp; Outliers</button>
+        </div>
         <p id="dist-judge" role="status"></p>
         <div id="dist-legend" class="legend"></div>
         <p id="dist-wts"></p>
         <p id="dist-note" hidden></p>
         <div id="dist-match-legend" class="legend" hidden></div>
       </div>
-      <div class="blk-scroll" tabindex="0" role="region" aria-label="Scrollable 256-block matrix"><div id="blk-grid" class="blocks"></div></div>
+      <div id="dist-matrix" class="blk-scroll" tabindex="0" role="region" aria-label="Scrollable 256-block matrix"><div id="blk-grid" class="blocks"></div></div>
+      <div id="dist-outliers" class="vmin-outliers" hidden></div>
       <details id="dist-tails" hidden>
         <summary id="dist-tails-label">Tail BLKs</summary>
         <div id="dist-tail-list"></div>

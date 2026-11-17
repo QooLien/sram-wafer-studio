@@ -23,7 +23,7 @@ AUDIT_COLUMNS = {"wt": "WT", "pattern": "Pattern", "tno": "Stop TNO", "x": "X", 
                  "endpoint": "Endpoint Finding", "w": "Write only", "r": "Read only", "wr": "Write & Read",
                  "none": "No Monitor"}
 VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "relation": "Vmin relation", "blk": "BLK", "tno": "TNO", "func": "Func.",
-                "pattern": "Pattern", "cutoff": "Tail cutoff", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
+                "pattern": "Pattern", "cutoff": "Tail upper fence (V)", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
                 "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs"}
 
 
@@ -407,7 +407,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 band(ws, 0, 0, 9, name, title)
                 ws.set_row(0, 26)
             if kind == "vmin":
-                band(ws, 1, 0, 12, f"{wafer.config.mode} · Highest eligible BLK Vmin · Tail cutoff Q3 + 1.5 × IQR", info)
+                band(ws, 1, 0, 12, f"{wafer.config.mode} · Highest eligible BLK Vmin · Tail · FBC90% Vmin above Q3 + 1.5 × IQR and ≥ 2 voltage steps", info)
             top = 3 if report_mode == "full" else 0
             for layer in (kind, "repair") if repair else (kind,):
                 for wt in range(len(wafer.phases)):

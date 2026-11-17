@@ -21,7 +21,7 @@
 
 ### 256 BLK 與 W/R 相關性
 
-- 在 256 BLK 選擇 WT 和 Vmin scope。矩陣顯示各 BLK 的 Vmin。紫框 J 為該範圍的 Judge BLK，橘框 T 為 Tail。Tail 列表提供 BLK、Vmin 和 Peak FBC，點選可開啟明細。用 **Show R/W Match Count** 在矩陣顯示左上 Read only、右上 Write only、左下 Write & Read、右下 No monitor hit 的筆數。
+- 在 256 BLK 選擇 WT 和 Vmin scope。矩陣顯示各 BLK 的 Vmin。紫框 J 為該範圍的 Judge BLK，橘框 T 為 Tail。**Box Plot & Outliers** 顯示每顆 Chip 的 FBC90% 箱型圖和 16 × 16 離群 BLK 位置。橘色是 Tail，另有顏色標示僅超出上界或低於下界的 BLK。點選位置可開啟明細。用 **Show R/W Match Count** 在矩陣顯示左上 Read only、右上 Write only、左下 Write & Read、右下 No monitor hit 的筆數。
 - **W/R Monitor Correlation** 按 WT 選擇 Scan、March 或 Scan & March。匹配取符合既有 Fail Map 判定的 BLK，收集 Pattern 內 Function TNO 的 Fail Address，使用相同 WT、Chip 和完整 Address 匹配任一設定電壓的 W-Low／R-Low Monitor。合併範圍去重。Pearson r 以具備完整 Function FBC 與所選 Monitor 觀測的 Chip 計算，使用可取得的 Fail Address 筆數。支援匯出所有已匯入 WT 的彙總與逐 Chip 資料。
 
 ## 判定
@@ -33,5 +33,6 @@
 - Fail BLK 取 Pattern 終點正值 FBC。Hard Fail、前序 WT Function fail 及同 WT 前序 Pattern 終點 fail 的 BLK 會排除。
 - Address Coverage 使用同 WT／Chip／BLK 在 Pattern 區間的 Address 聯集，並保留終點 FBC 和地址差。
 - FBC0 取首次正值 FBC 前一個電壓。FBC1～10 取首次達門檻的當站。FBC90% 取第一次達該 BLK 在 Pattern 內最高 FBC 的 90% 的站點。累積曲線按 Config 順序以截至當站的最高 FBC 除以整段峰值；電壓分布保留各站原始 FBC。
-- Chip Vmin 取有效 BLK 中的最高 Vmin。Tail 基於每顆 Chip／WT 正值峰值 FBC 的 Q3 + 1.5 × IQR，至少四個完整樣本才套用。缺資料會在狀態和明細中保留。
+- 依 Chip、WT、所選 Vmin scope 計算 Tail。至少四筆確定數值的 FBC90% BLK Vmin 才計算上下界。Pass、缺資料及 ≥ 下限不納入四分位數。高於 Q3 + 1.5 × IQR 且從 Median 往上跨至少兩個實際測試電壓階，才判定為 Tail。電壓階以去重後的測試電壓順序由低到高計算。
+- Scan／March 各使用自己的測試範圍。Merge 90% 使用兩段共用的峰值。Chip Vmin 的箱型圖對每個 BLK 取各合格 Pattern 的最高 FBC90% Vmin。兩個電壓階以該 BLK 觸發 Pattern 的電壓計算。Judge 仍使用選定的 FBC 模式。Wafer Map 和矩陣採用同一份 Tail 清單。矩陣並列排除 Tail 前的最高值與排除後的 Judge Vmin。
 - 「核對既有 VBA 結果」可讀取同一本舊 .xlsm 內的 Config、Fail Address、FBC by BLK 和 Import Index，驗證來源後重新核對。桌面視窗負責互動，輸出的 .xlsx 報表是靜態資料。

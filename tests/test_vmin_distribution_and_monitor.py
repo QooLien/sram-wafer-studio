@@ -1,31 +1,67 @@
 """Check that Tail values remain visible, and address matching shares the Map scope."""
 from array import array
 from copy import deepcopy
+from pathlib import Path
 import unittest
 
-from engine import Config, Test
+from engine import ChipData, Config, Crossing, Identity, Phase, Test, Wafer, voltage_distribution
 from test_vmin_hard_voltage_bound import make_wafer
+
+
+def voltage_tail_wafer():
+    tests = (Test("Function", 110, "Hard", 1.26, stop="Hard Fail"),
+             Test("Function", 210, "Scan", 1.20),
+             Test("Function", 209, "Scan", 1.035),
+             Test("Function", 208, "Scan", .99),
+             Test("Function", 207, "Scan", .90, stop="Scan"),
+             Test("Function", 310, "March", .90, stop="March"))
+    positive = {209: [0], 208: [0, 9], 207: list(range(10))}
+    die = ChipData()
+    for test in tests:
+        blks = positive.get(test.tno, ())
+        die.fbc[test.tno] = array("Q", [int(b in blks) for b in range(256)])
+        die.masks[test.tno] = sum(1 << b for b in blks)
+    source = Identity(Path("tail_WT1.asc"), "TAIL", 1, 1, "AA", 1)
+    return Wafer(Config(tests, "FBC0"), (Phase(source, {(0, 0): die}),))
 
 
 class TestVminDistribution(unittest.TestCase):
     def test_higher_tail_value_never_becomes_judge(self):
-        wafer = make_wafer(first=1000, second=1000)
-        die = wafer.die(0, (0, 0))
-        die.fbc[205][1:5] = array("Q", [1] * 4)
-        die.masks[205] = 31
+        wafer = voltage_tail_wafer()
         for scope, judge in (("chip", wafer.chip_vmin), ("pattern:Scan", wafer.pattern_chip_vmin),
                              ("merge", wafer.merged_chip_vmin)):
             with self.subTest(scope=scope):
-                distribution = wafer.vmin_distribution(0, (0, 0), scope)
+                result = wafer.vmin_distribution(0, (0, 0), scope)
+                summary = result["summary"]
                 expected = judge(0, (0, 0), "Scan") if scope.startswith("pattern:") else judge(0, (0, 0))
-                self.assertEqual(distribution["summary"], expected)
-                blocks = distribution["entries"]
+                self.assertEqual(summary, expected)
+                blocks = result["entries"]
                 self.assertEqual([row["blk"] for row in blocks], list(range(256)))
+                self.assertEqual(result["box"]["count"], 10)
+                self.assertEqual(result["box"]["median"], .90)
+                self.assertEqual(result["box"]["upper_fence"], .90)
                 self.assertTrue(blocks[0]["tail"])
-                self.assertEqual((blocks[0]["voltage"], blocks[0]["relation"], blocks[0]["peak_fbc"]),
-                                 (1.2, ">=", 1000))
-                self.assertEqual([row["blk"] for row in blocks if row["judge"]], [1])
-                self.assertLess(blocks[1]["voltage"], blocks[0]["voltage"])
+                self.assertEqual((blocks[0]["fbc90_voltage"], blocks[0]["peak_fbc"],
+                                  blocks[0]["steps_above_median"]), (1.035, 1, 2))
+                self.assertFalse(blocks[9]["tail"])
+                self.assertEqual(blocks[9]["steps_above_median"], 1)
+                self.assertEqual([row["blk"] for row in blocks if row["judge"]], [9])
+                self.assertEqual(summary["before_tail"]["blk"], 0)
+                self.assertLess(summary["voltage"], summary["before_tail"]["voltage"])
+
+    def test_voltage_from_another_pattern_is_not_counted_as_a_step(self):
+        readings = {blk: ("Scan", Crossing(207, .9, "Scan", 1, "Fail")) for blk in range(8)}
+        readings[8] = "Scan", Crossing(209, 1.035, "Scan", 1, "Fail")
+        stats, outliers, tail = voltage_distribution(readings, {"Scan": (.90, 1.035), "March": (.99,)})
+        self.assertEqual(stats["median"], .9)
+        self.assertEqual(outliers, {8: 1})
+        self.assertEqual(tail, [])
+
+    def test_insufficient_exact_values_leave_tail_unclassified(self):
+        result = make_wafer(first=0, second=1).vmin_distribution(0, (0, 0), "pattern:Scan")
+        self.assertEqual(result["box"]["count"], 1)
+        self.assertNotIn("upper_fence", result["box"])
+        self.assertFalse(result["summary"]["tail"])
 
     def test_march_cohort_can_show_observed_values_without_judge(self):
         wafer = make_wafer()
