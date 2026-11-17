@@ -537,6 +537,49 @@ function accumulationChart(pattern, stations, result) {
   article.append(chart.wrap);
   return article;
 }
+function combinedAccumulation(details) {
+  const names=Object.keys(details.fbc90).filter(name=>['scan','march'].includes(name.toLowerCase()));
+  if(names.length!==2)return null;
+  const article=el('div',null,'chart-content');
+  const segments=names.map(name=>({name,result:details.fbc90[name],stations:details.sweep.filter(row=>row.pattern===name)}));
+  const usable=segments.filter(seg=>seg.stations.length&&seg.stations.every(st=>st.accumulated!==null));
+  const summary=el('p',null,'chart-summary');
+  summary.textContent=segments.map(seg=>seg.name+': '+(seg.result.voltage===null?seg.result.status:vfmt(seg.result.voltage)+' · TNO '+seg.result.tno)).join('  |  ');
+  article.append(summary);
+  if(!usable.length){article.append(el('p','Scan／March 均無可用的 FBC90% 累積資料。','tab-note'));return article;}
+  const count=segments.reduce((n,seg)=>n+seg.stations.length,0);
+  const width=Math.max(650,count*34+120);
+  const chart=chartFrame('Scan / March FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%',390,'Test Voltage (V) · Scan / March');
+  const stride=(chart.right-chart.left)/count;
+  let offset=0;
+  const colors=['#2666a4','#c2762b'];
+  for(const [index,seg] of segments.entries()){
+    const start=offset;
+    const mid=chart.left+(start+seg.stations.length/2)*stride;
+    const groupY=chart.bottom+81;
+    chart.add('text',{x:mid,y:groupY,'text-anchor':'middle',class:'chart-label chart-axis-title'},seg.name);
+    if(index>0)chart.add('line',{x1:chart.left+start*stride,x2:chart.left+start*stride,y1:chart.y(100),y2:chart.bottom+65,class:'chart-pattern-divider'});
+    const points=[];
+    for(const [i,station] of seg.stations.entries()){
+      const x=chart.left+(offset+i+.5)*stride;
+      const label=station.v===null?'—':vfmt(station.v).replace(/ V$/, 'v');
+      const tickY=chart.bottom+10;
+      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'end',class:'chart-label chart-voltage-tick'},label);
+      if(station.accumulated!==null){
+        const pct=station.accumulated*100;
+        points.push([x,chart.y(pct)]);
+        const hit=station.tno===seg.result.tno;
+        chartMark(chart,'circle',{cx:x,cy:chart.y(pct),r:hit?6:4,class:hit?'chart-crossing':'chart-point',fill:hit?'#9b422e':'#fff',stroke:colors[index]},seg.name+' · '+stationLabel(station)+' · '+pct.toFixed(1)+'%');
+      }
+    }
+    if(points.length>1)chart.add('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:colors[index],'stroke-width':2.4});
+    offset+=seg.stations.length;
+  }
+  chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
+  article.append(chart.wrap);
+  article.append(el('p','Scan／March 分段顯示；各 Pattern 的 FBC90% 累積比例獨立計算，不跨 Pattern 連線。','chart-note'));
+  return article;
+}
 function countChart(label, unit, peak, width, height, xLabel) {
   const ceiling=Math.max(1,peak);
   const step=Math.ceil(ceiling/Math.min(4,ceiling));
@@ -673,8 +716,9 @@ function patternCharts(details, initialPattern, showTables) {
       ? section('W/R Match by Test Voltage',wrMatchDistribution(name,details.wr_matches.patterns[name],details.wr_matches.labels))
       : section(comparison.title,voltageDistribution(comparison));
     const accumulation=section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name]));
+    const hasCombined=Object.keys(details.fbc90).filter(n=>['scan','march'].includes(n.toLowerCase())).length===2;
     charts.classList.toggle('combined-voltage',showComparison);
-    charts.replaceChildren(...(showComparison?[voltageChart,accumulation]:[accumulation,voltageChart]));
+    charts.replaceChildren(...(hasCombined?[voltageChart]:(showComparison?[voltageChart,accumulation]:[accumulation,voltageChart])));
     if(updateTables)showTables(name,stations);
   };
   render();
@@ -729,6 +773,8 @@ async function refreshDetail(fromMatrix=false) {
     });
     addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses));
   };
+  const combined=combinedAccumulation(details);
+  if(combined)body.append(section('Scan / March FBC90% Accumulation',combined));
   if(Object.keys(details.fbc90).length){
     s.detailPattern=initialPattern;
     for(const name of Object.keys(details.fbc90))body.append(patternCharts(details,name,showTables));
