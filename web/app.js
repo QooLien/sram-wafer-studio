@@ -313,6 +313,7 @@ async function refreshMap() {
   const dualPatterns=s.layer==='vmin'
     ? s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase())) : [];
   const dual=dualPatterns.length===2;
+  board.classList.toggle('wafer-dual-host',dual);
   const renderBoard=(target,data,scale)=>{
     target.style.setProperty('--wafer-columns',nx);
     target.style.setProperty('--wafer-rows',ny);
