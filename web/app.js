@@ -593,6 +593,7 @@ function combinedAccumulation(details) {
   const chart=chartFrame('Scan / March FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%',390,'Test Voltage (V) · Scan / March');
   const stride=(chart.right-chart.left)/count;
   let offset=0;
+  const mergeLine=[];
   const colors=['#2666a4','#c2762b'];
   for(const [index,seg] of segments.entries()){
     const start=offset;
@@ -609,6 +610,7 @@ function combinedAccumulation(details) {
       if(station.fbc!==null && merged?.status!=='No Data' && !['Hard Fail','Prior WT'].includes(merged?.status)){
         const pct=mergedPoints[offset+i];
         points.push([x,chart.y(pct)]);
+        mergeLine.push([x,chart.y(pct)]);
         const hit=station.tno===merged?.tno;
         chartMark(chart,'circle',{cx:x,cy:chart.y(pct),r:hit?6:4,class:hit?'chart-crossing':'chart-point',fill:hit?'#9b422e':'#fff',stroke:colors[index]},seg.name+' · '+stationLabel(station)+' · '+pct.toFixed(1)+'%');
       }
@@ -616,6 +618,7 @@ function combinedAccumulation(details) {
     if(points.length>1)chart.add('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:colors[index],'stroke-width':2.4});
     offset+=seg.stations.length;
   }
+  if(mergeLine.length>1)chart.add('polyline',{points:mergeLine.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#26384e','stroke-width':1.2,'stroke-dasharray':'3 3'});
   chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
   article.append(chart.wrap);
   article.append(el('p','Merge 90%：Scan → March 依 Config 順序共用最大 FBC 作為 100%，以截至目前的最大 FBC 計算比例；兩區段分別標示。','chart-note'));
