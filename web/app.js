@@ -6,6 +6,7 @@ const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_
 const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
+const vminfmt = (result,value=result?.voltage) => (result?.relation==='>='&&value!=null?'≥ ':'')+vfmt(value);
 const chipKey = row => row.x + ',' + row.y;
 function el(tag, text, className) {
   const node = document.createElement(tag);
@@ -242,7 +243,7 @@ function tint(row) {
       12:'#dbaddb',13:'#dbaddb',14:'#ffd966',15:'#d9d2e9',16:'#d9d2e9',17:'#d9d2e9',18:'#ffe699',19:'#9bc2e6',20:'#bfbfbf'};
     return [[val ?? '—',colors[val] || (val>=5&&val<=8?'#f8cbad':'#eef3f7')]];
   }
-  if(s.layer === 'vmin') return [[val === null ? row.status : vfmt(val).split(' ')[0],val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : (s.vminScale?.color(val) ?? '#f3d86b')]];
+  if(s.layer === 'vmin') return [[val === null ? row.status : vminfmt(row,val).replace(/ V$/, ''),val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : (s.vminScale?.color(val) ?? '#f3d86b')]];
   if(row.gray) return [['','#808080']];
   if(row.blue) return [['','#00b0f0']];
   if(s.layer === 'wr') return row.wr.map((v,i)=>[v||'',v?['#fff','#ffd966','#ff6600','#fff'][i]:'#fff',i === 3?'#8c8c8c':'']);
@@ -266,7 +267,7 @@ function showChip(row) {
   if(!row) return put('chip-summary',el('h2','Chip 明細'),el('p','從 Wafer Map 點選一顆 Chip。'));
   const fields=[['WT','WT'+s.wt],['狀態',row.status]];
   if(s.layer === 'vmin'){
-    fields.push(['判定來源',s.vminJudge?.source??'Chip Vmin'],['Vmin',vfmt(row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
+    fields.push(['判定來源',s.vminJudge?.source??'Chip Vmin'],['Vmin',vminfmt(row,row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
       ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail 門檻',row.cutoff==null?'—':Number(row.cutoff).toFixed(2)],
       ['剩餘／資料不足',row.remaining+'／'+row.incomplete]);
   } else if(row.wr){
@@ -329,13 +330,13 @@ async function refreshMap() {
     for(let y=y0;y<=y1;y++)axis(y,1,y-y0+2);
     for(const row of data){
       const values=s.layer==='vmin'
-        ? [[row.value===null?row.status:vfmt(row.value).split(' ')[0],
+        ? [[row.value===null?row.status:vminfmt(row,row.value).replace(/ V$/, ''),
             row.value===null?(row.status==='Pass'?'#dbeafe':'#e2e8f0'):(scale?.color(row.value)??'#f3d86b')]]
         : tint(row);
       const chip=el('button',null,'chip'+(values.length===4?' quad':values.length===2?' half':''));
       chip.dataset.chip=chipKey(row);
       chip.style.gridColumn=row.x-x0+2;chip.style.gridRow=row.y-y0+2;
-      chip.title='X'+row.x+' Y'+row.y+' · '+row.status+(row.value!=null?' · '+vfmt(row.value):'');
+      chip.title='X'+row.x+' Y'+row.y+' · '+row.status+(row.value!=null?' · '+vminfmt(row,row.value):'');
       chip.setAttribute('aria-label',chip.title);
       chip.dataset.active=String(s.selected===chipKey(row));
       for(const [value,bg,fg] of values){const span=el('span',value);span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span);}
@@ -408,7 +409,7 @@ function renderWorstBlockList() {
   const names=s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase()));
   const items=names.flatMap(pattern=>s.blocks.flatMap(entry=>entry.worst_vmin
     .filter(hit=>hit.wt===s.wt&&hit.pattern===pattern)
-    .map(hit=>({pattern,blk:entry.blk,voltage:hit.voltage}))));
+    .map(hit=>({pattern,blk:entry.blk,voltage:hit.voltage,relation:hit.relation}))));
   const heading=el('div',null,'worst-list-heading');
   heading.append(el('h3','WT'+s.wt+' · Worst Scan / March Vmin'),
     el('p','點選 BLK 可直接開啟明細；同一 Pattern 若有相同最差 Vmin，會列出所有並列 BLK。','tab-note'));
@@ -417,8 +418,8 @@ function renderWorstBlockList() {
   const buttons=el('div',null,'worst-block-items');
   for(const item of items){
     const button=el('button',null,'worst-block-item');
-    button.append(el('strong',item.pattern),el('span','BLK '+item.blk),el('span',vfmt(item.voltage)));
-    button.title='開啟 '+item.pattern+' · BLK '+item.blk+' · '+vfmt(item.voltage);
+    button.append(el('strong',item.pattern),el('span','BLK '+item.blk),el('span',vminfmt(item)));
+    button.title='開啟 '+item.pattern+' · BLK '+item.blk+' · '+vminfmt(item);
     button.onclick=()=>{s.detailPattern=item.pattern;$('blk-grid').children[item.blk]?.click();};
     buttons.append(button);
   }
@@ -433,29 +434,29 @@ function showGridVmin() {
   const judgeSummary=$('dist-judge');
   judgeSummary.hidden=!judge;
   judgeSummary.textContent=judge
-    ? 'WT'+s.wt+' · '+context.source+' · Judge BLK '+judge.blk+' · '+vfmt(judge.value)+' · TNO '+judge.tno : '';
+    ? 'WT'+s.wt+' · '+context.source+' · Judge BLK '+judge.blk+' · '+vminfmt(judge,judge.value)+' · TNO '+judge.tno : '';
   for(const [index,entry] of s.blocks.entries()) {
     const tile=cells[index];
     const label=tile.querySelector('.block-vmin');
     const isJudge=judge?.blk===entry.blk;
     tile.classList.toggle('judge-cell',isJudge);
     tile.querySelector('.block-judge').hidden=!isJudge;
-    const normal=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : entry.trigger.voltage==null?entry.trigger.status:vfmt(entry.trigger.voltage) : '';
+    const normal=entry.trigger ? s.report.mode==='FBC90%'&&entry.trigger.relation!=='>=' ? entry.trigger.func : entry.trigger.voltage==null?entry.trigger.status:vminfmt(entry.trigger) : '';
     const worst=entry.worst_vmin.filter(hit=>hit.wt===s.wt);
-    for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
+    for(const hit of worst)worstPatterns.set(hit.pattern,hit);
     tile.classList.toggle('worst-cell',worst.length>0);
     label.classList.toggle('worst',worst.length>0);
-    const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).replace(/ V$/, 'v')))];
+    const worstVoltages=[...new Set(worst.map(hit=>vminfmt(hit).replace(/ V$/, 'v')))];
     label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
-    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vfmt(judge.value)+' · TNO '+judge.tno:'',normal,entry.trigger?.status==='No Vmin'?crossingReason(entry.trigger):'',...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
-      ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
+    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vminfmt(judge,judge.value)+' · TNO '+judge.tno:'',normal,entry.trigger?.status==='No Vmin'?crossingReason(entry.trigger):'',...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
+      ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vminfmt(hit))].filter(Boolean).join(' · ');
     tile.title=title;
     tile.setAttribute('aria-label',title);
   }
   const summary=$('dist-worst');
   summary.hidden=!worstPatterns.size;
   const summaryText=s.report.patterns.filter(pattern=>worstPatterns.has(pattern))
-    .map(pattern=>pattern+' '+vfmt(worstPatterns.get(pattern))).join(' · ');
+    .map(pattern=>pattern+' '+vminfmt(worstPatterns.get(pattern))).join(' · ');
   summary.textContent='WT'+s.wt+' · Worst Vmin · '+summaryText;
 }
 async function refreshGrid() {
@@ -564,6 +565,7 @@ function crossingReason(result) {
     'Pass':'完整 FBC 皆為 0，未觸發 Vmin。',
     'Below':'尚未達到所選 FBC 門檻。'
   };
+  if(result.relation==='>=')return '最高測試電壓已 Fail；Vmin 下限採用 Config 的 Hard Fail 電壓，非精確量測值。';
   if(result.status==='No Vmin')return s.report.mode==='FBC0'
     ? 'FBC0 找不到首筆 Fail 之前的電壓組：首個電壓組已 Fail，或前站未設定電壓。'
     : '達門檻的 TNO 未設定測試電壓。';
@@ -582,7 +584,7 @@ function accumulationChart(pattern, stations, result, segments=[]) {
     return article;
   }
   const info = result.tno === null ? 'All Pass · Peak FBC 0' :
-    'First crossing ≥90% · '+vfmt(result.voltage)+' · '+result.func+' · TNO '+result.tno;
+    'First crossing ≥90% · Vmin '+vminfmt(result)+' · '+result.func+' · TNO '+result.tno+(result.relation==='>='?' · Test '+vfmt(result.test_voltage):'');
   article.append(el('p',info,'chart-summary'));
   const runs = [];
   for (const [i,station] of stations.entries()) {
@@ -884,7 +886,7 @@ async function refreshDetail(fromMatrix=false) {
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
   body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC','判定說明'],
-    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,c.voltage==null?c.status:vfmt(c.voltage),c.peak,crossingReason(c)])),true));
+    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,c.voltage==null?c.status:vminfmt(c),c.peak,crossingReason(c)])),true));
   body.append(sweep,address);
   put('block-detail',title,body);setMapStage(s.mapStage);
   return march?sweep:null;

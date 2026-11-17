@@ -22,7 +22,7 @@ AUDIT_COLUMNS = {"wt": "WT", "pattern": "Pattern", "tno": "Stop TNO", "x": "X", 
                  "finding": "Finding", "total": "Pattern Address Count", "basis": "Coverage Basis",
                  "endpoint": "Endpoint Finding", "w": "Write only", "r": "Read only", "wr": "Write & Read",
                  "none": "No Monitor"}
-VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "blk": "BLK", "tno": "TNO", "func": "Func.",
+VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "relation": "Vmin relation", "blk": "BLK", "tno": "TNO", "func": "Func.",
                 "pattern": "Pattern", "cutoff": "Tail cutoff", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
                 "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs"}
 
@@ -65,7 +65,7 @@ def cell_style(data, kind):
     if kind in ("cat", "repair"):
         return [str(val) if val else "—"], [CAT_COLORS.get(val, "#f1f5f9")]
     if kind == "vmin":
-        return [format(val, ".3f").rstrip("0").rstrip(".") if val is not None else data["status"]], [
+        return [("≥ " if data.get("relation") == ">=" else "") + format(val, ".3f").rstrip("0").rstrip(".") if val is not None else data["status"]], [
             "#f8cbad" if val is not None else "#dbeafe" if data["status"] == "Pass" else "#e2e8f0"]
     if data.get("blue"):
         return [""], ["#00b0f0"]
@@ -224,6 +224,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             ws = new_table(name, cols)
             last, _ = write_rows(ws, values)
             ws.autofilter(0, 0, last, len(cols) - 1)
+            return ws
 
         def band(ws, row, c0, c1, value, fmt):
             if c0 == c1:
@@ -329,12 +330,12 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             last, _ = write_rows(ws, rows, first=2)
             ws.autofilter(1, 0, last, len(order) + 2)
 
-        def map_cell_format(color, font, kind, edges):
-            key = (color, font, kind, edges)
+        def map_cell_format(color, font, kind, edges, relation=""):
+            key = (color, font, kind, edges, relation)
             if key not in fill_formats:
                 fmt = style | {"font_name": "Arial", "font_size": 10, "bold": True, "bg_color": color,
                                "font_color": font, "border_color": "#596878",
-                               "num_format": '0.00#"v"' if kind == "vmin" else "0"}
+                               "num_format": (('"≥ "' if relation == ">=" else '') + '0.00#"v"') if kind == "vmin" else "0"}
                 fmt.update(dict(zip(boundary, edges)))
                 fill_formats[key] = book.add_format(fmt)
             return fill_formats[key]
@@ -380,7 +381,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                             inner = 0 if whole else 4
                             edges = (1 if offset == 0 else inner, 1 if offset == columns - 1 else inner,
                                      1 if sub == 0 else inner, 1 if sub == rows - 1 else inner)
-                            fmt = map_cell_format(color, font, kind, edges)
+                            fmt = map_cell_format(color, font, kind, edges, point.get("relation", ""))
                             text = labels[index]
                             if kind == "vmin" and point["value"] is not None:
                                 value = point["value"]
@@ -479,10 +480,10 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                         trigger["pattern"] if trigger else None, "#edf4fa")
                     label = ""
                     if trigger:
-                        if wafer.config.mode == "FBC90%":
+                        if wafer.config.mode == "FBC90%" and trigger.get("relation") != ">=":
                             label = trigger["func"] or ""
                         elif trigger["voltage"] is not None:
-                            label = f'{trigger["voltage"]:.3f}'.rstrip('0').rstrip('.') + "v"
+                            label = ('≥ ' if trigger.get('relation') == '>=' else '') + f'{trigger["voltage"]:.3f}'.rstrip('0').rstrip('.') + "v"
                     fmt = map_cell_format(color, "#17324d", "", (1, 1, 1, 0))
                     band(ws, start, col * block_width, (col + 1) * block_width - 1, label, fmt)
                     note = f'BLK {record["blk"]}'
@@ -562,9 +563,13 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                     elif source:
                         ws.write_number(end, 12, source)
             ws.autofilter(0, 0, end, len(cols) - 1)
-            table("Chip Vmin", ["WT", "X", "Y", *VMIN_COLUMNS.values()],
+            vmin_ws = table("Chip Vmin", ["WT", "X", "Y", *VMIN_COLUMNS.values()],
                   ((wafer.wt_numbers[wt], *chip, *((",".join(map(str, result[k])) if isinstance(result[k], list) else result[k])
                                     for k in VMIN_COLUMNS)) for (wt, chip), result in wafer.all_vmin.items()))
+            lower_bound_fmt = book.add_format(style | {"num_format": '"≥ "0.00#'})
+            for row_index, result in enumerate(wafer.all_vmin.values(), 1):
+                if result.get("relation") == ">=":
+                    vmin_ws.write_number(row_index, 4, result["voltage"], lower_bound_fmt)
             unified_maps()
             map_sheet("Cat Wafer Map", "cat", repair=True)
             map_sheet("Chip Vmin Map", "vmin")

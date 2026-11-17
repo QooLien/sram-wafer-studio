@@ -21,6 +21,8 @@
 
 ## 判定
 
+- 若最高設定測試電壓已達所選模式的 Fail 門檻，Vmin 顯示為「≥ Hard Fail 電壓」下限；例如首個 1.035 V TNO 判 Fail、Hard Fail 設為 1.20 V 時輸出 ≥ 1.20 V。Hard Fail 電壓取 Config Hard Fail 區間的最高設定值，原始測試電壓及觸發 TNO 保留。缺少必要電壓時不推定下限。
+
 - Fail BLK 取 Pattern 終點正值 FBC。Hard Fail、前序 WT Function fail 及同 WT 前序 Pattern 終點 fail 的 BLK 會排除。
 - Address Coverage 使用同 WT／Chip／BLK 在 Pattern 區間的 Address 聯集，並保留終點 FBC 和地址差。
 - FBC0 取首次正值 FBC 前一個電壓。FBC1～10 取首次達門檻的當站。FBC90% 取第一次達該 BLK 在 Pattern 內最高 FBC 的 90% 的站點。累積曲線按 Config 順序以截至當站的最高 FBC 除以整段峰值；電壓分布保留各站原始 FBC。

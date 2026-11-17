@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.12.zip](SRAM%20Analysis%20Tool%20v1.7.12.zip)
+[下載 SRAM Analysis Tool v1.7.13.zip](SRAM%20Analysis%20Tool%20v1.7.13.zip)
 
-v1.7.12 為 Scan／March／Merge FBC90% 累積圖加入右側 Fail bit count (FBC) 副座標軸與橘色原始 FBC 虛線。左軸保留 running maximum 累積百分比，右軸以各圖 Peak 為上限，Merge 共用 Peak。Pattern PDF／PNG／Excel 圖表同步支援右軸；缺資料與排除規則維持不變。
+v1.7.13 當最高設定測試電壓達到所選模式的 Fail 門檻時，Vmin 輸出「≥ Config Hard Fail 電壓」。例如 Hard Fail 為 1.20 V、首個測試 1.035 V 判定 Fail，輸出 ≥ 1.20 V，並保留原始測試電壓與 TNO。地圖、matrix、BLK 明細及報表同步顯示下限符號；Hard Fail／Prior WT／Tail 排除及各模式門檻保留。未設定 Hard Fail 電壓或測試電壓不完整時，不推定此下限。
 
 保留版本：
 
+- [v1.7.12](SRAM%20Analysis%20Tool%20v1.7.12.zip)
 - [v1.7.11](SRAM%20Analysis%20Tool%20v1.7.11.zip)
 - [v1.7.10](SRAM%20Analysis%20Tool%20v1.7.10.zip)
 - [v1.7.9](SRAM%20Analysis%20Tool%20v1.7.9.zip)

@@ -10,7 +10,7 @@ from threading import Lock, Thread
 import json
 import sys
 
-from engine import Config, MATCH_LABELS, MODES, csv_config, fbc_voltage_comparison, identity, load_wafer, match_counts_by_voltage
+from engine import Config, MATCH_LABELS, MODES, csv_config, fbc_voltage_comparison, identity, load_wafer, match_counts_by_voltage, voltage_text
 from workbook_settings import workbook_config
 from workbook_results import read_existing
 from exports import AUDIT_COLUMNS, MAPS, VMIN_COLUMNS, batch_name, compare_order, save_report, test_headers
@@ -196,7 +196,7 @@ def view(wafer, query):
         source = ((*row[:3], *(row[i] for i in order)) for row in wafer.fbc_rows(chip))
     elif kind == "vmin":
         headers = ["X", "Y", *VMIN_COLUMNS.values()]
-        source = ((*xy, *(result[k] for k in VMIN_COLUMNS)) for (p, xy), result in wafer.all_vmin.items()
+        source = ((*xy, *(f"≥ {voltage_text(result[k])}" if k == "voltage" and result.get("relation") == ">=" else result[k] for k in VMIN_COLUMNS)) for (p, xy), result in wafer.all_vmin.items()
                   if p == wt and (chip is None or chip == xy))
     else:
         raise ValueError("檢視不存在。")

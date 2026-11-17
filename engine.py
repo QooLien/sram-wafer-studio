@@ -153,6 +153,10 @@ class Config:
     def hard(self):
         return tuple(t for name, scope in self.intervals.items() if name.lower() == "hard fail" for t in scope)
 
+    @cached_property
+    def hard_voltage(self):
+        return max((test.voltage for test in self.hard if test.voltage is not None), default=None)
+
     def voltages_for(self, tnos):
         return list(dict.fromkeys(self.index[tno].voltage for tno in tnos))
 
@@ -390,9 +394,11 @@ class Crossing:
     func: str | None
     fbc: int | None
     status: str
+    relation: str = ""
+    test_voltage: float | None = None
 
 
-def vmin(scope, values, mode):
+def vmin(scope, values, mode, *, hard_voltage=None):
     available = [v for v in values if v is not None]
     peak = max(available, default=0)
     if mode == "FBC90%":
@@ -401,6 +407,8 @@ def vmin(scope, values, mode):
         threshold = max(1, (9 * peak + 9) // 10)
     else:
         threshold = max(1, int(mode[3:]))
+    highest = max((test.voltage for test in scope if test.voltage is not None), default=None)
+    voltage_complete = all(test.voltage is not None for test in scope)
     group = previous = None
     missing = False
     for test, value in zip(scope, values):
@@ -413,6 +421,8 @@ def vmin(scope, values, mode):
         if value is None:
             missing = True
         elif value >= threshold:
+            if not missing and voltage_complete and hard_voltage is not None and test.voltage == highest:
+                return Crossing(test.tno, hard_voltage, test.name, value, "Fail", ">=", test.voltage)
             voltage = previous if mode == "FBC0" else test.voltage
             status = "No Data" if missing else ("No Vmin" if voltage is None else "Fail")
             return Crossing(test.tno, None if missing else voltage, test.name, value, status)
@@ -672,7 +682,7 @@ class Wafer:
                     continue
                 values = [vector[b] if vector is not None else None for vector in vectors]
                 peak = max((v for v in values if v is not None), default=0)
-                yield name, b, vmin(scope, values, mode), peak, sweep_complete
+                yield name, b, vmin(scope, values, mode, hard_voltage=self.config.hard_voltage), peak, sweep_complete
             prior_valid &= endpoint is not None
             prior |= endpoint or 0
 
@@ -686,7 +696,7 @@ class Wafer:
                 unknown.add(b)
             peaks[b] = max(peaks[b], peak)
             old = best.get(b)
-            if crossing.voltage is not None and (old is None or old[1].voltage is None or crossing.voltage > old[1].voltage):
+            if crossing.voltage is not None and (old is None or old[1].voltage is None or (crossing.voltage, crossing.relation == ">=") > (old[1].voltage, old[1].relation == ">=")):
                 best[b] = name, crossing
             elif crossing.status == "No Vmin" and old is None:
                 best[b] = name, crossing
@@ -696,7 +706,7 @@ class Wafer:
         tail_set = set(tail)
         kept = [b for b in pool if b not in tail_set]
         valid = [b for b in kept if b in best and best[b][1].voltage is not None]
-        winner = max(valid, key=lambda b: (best[b][1].voltage, -b), default=None)
+        winner = max(valid, key=lambda b: (best[b][1].voltage, best[b][1].relation == ">=", -b), default=None)
         incomplete = len(unknown.intersection(kept))
         status = ("Vmin" if winner is not None else "No BLK" if not kept else "No Data" if incomplete
                   else "No Vmin" if any(b in best for b in kept) else "Below" if any(peaks[b] for b in kept)
@@ -704,7 +714,7 @@ class Wafer:
         pattern, result = best[winner] if winner is not None else (None, None)
         return {"status": status, "voltage": result.voltage if result else None, "blk": winner,
                 "tno": result.tno if result else None, "func": result.func if result else None,
-                "pattern": pattern, "cutoff": cutoff, "tail": tail, "hard": list(bits(hard)),
+                "relation": result.relation if result else "", "pattern": pattern, "cutoff": cutoff, "tail": tail, "hard": list(bits(hard)),
                 "prior": past.bit_count(), "remaining": len(kept), "incomplete": incomplete}
 
     def pattern_chip_vmin(self, wt, chip, pattern):
@@ -713,16 +723,16 @@ class Wafer:
         tail = set(aggregate["tail"])
         candidates = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip, mode="FBC90%")
                       if name == pattern and blk not in tail and crossing.voltage is not None]
-        winner = max(candidates, key=lambda item: (item[1].voltage, -item[0]), default=None)
+        winner = max(candidates, key=lambda item: (item[1].voltage, item[1].relation == ">=", -item[0]), default=None)
         if winner is None:
             return {"status": "No Vmin", "voltage": None, "value": None, "blk": None,
-                    "tno": None, "func": None, "pattern": pattern,
+                    "tno": None, "func": None, "relation": "", "pattern": pattern,
                     "tail": aggregate["tail"], "hard": aggregate["hard"],
                     "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
                     "incomplete": aggregate["incomplete"]}
         blk, crossing = winner
         return {"status": "Vmin", "voltage": crossing.voltage, "value": crossing.voltage,
-                "blk": blk, "tno": crossing.tno, "func": crossing.func, "pattern": pattern,
+                "blk": blk, "tno": crossing.tno, "func": crossing.func, "relation": crossing.relation, "pattern": pattern,
                 "tail": aggregate["tail"], "hard": aggregate["hard"],
                 "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
                 "incomplete": aggregate["incomplete"]}
@@ -743,7 +753,7 @@ class Wafer:
             return Crossing(None, None, None, None, "No Data")
         scope = [test for name in names for test in self.config.patterns[name]]
         values = [die.fbc[test.tno][blk] if test.tno in die.fbc else None for test in scope]
-        return vmin(scope, values, "FBC90%")
+        return vmin(scope, values, "FBC90%", hard_voltage=self.config.hard_voltage)
 
     def merged_chip_vmin(self, wt, chip):
         aggregate = self.chip_vmin(wt, chip)
@@ -753,13 +763,13 @@ class Wafer:
                       if blk not in tail and not ((hard | past) >> blk & 1)
                       for result in [self.merged_fbc90(wt, chip, blk)]
                       if result.voltage is not None]
-        winner = max(candidates, key=lambda item: (item[1].voltage, -item[0]), default=None)
+        winner = max(candidates, key=lambda item: (item[1].voltage, item[1].relation == ">=", -item[0]), default=None)
         result = {"status": "Vmin" if winner else "No Vmin",
                   "voltage": winner[1].voltage if winner else None,
                   "blk": winner[0] if winner else None,
                   "tno": winner[1].tno if winner else None,
                   "func": winner[1].func if winner else None,
-                  "pattern": "Merge 90%", "tail": aggregate["tail"],
+                  "relation": winner[1].relation if winner else "", "pattern": "Merge 90%", "tail": aggregate["tail"],
                   "hard": aggregate["hard"], "cutoff": aggregate["cutoff"],
                   "remaining": aggregate["remaining"], "incomplete": aggregate["incomplete"]}
         result["value"] = result["voltage"]
@@ -810,10 +820,10 @@ class Wafer:
                 if pattern in tracked and crossing.voltage is not None:
                     key = number, pattern
                     previous = worst.get(key)
-                    if previous is None or crossing.voltage > previous[0]:
-                        worst[key] = crossing.voltage, [blk]
-                    elif crossing.voltage == previous[0]:
-                        previous[1].append(blk)
+                    if previous is None or (crossing.voltage, crossing.relation == ">=") > (previous[0], previous[1] == ">="):
+                        worst[key] = crossing.voltage, crossing.relation, [blk]
+                    elif (crossing.voltage, crossing.relation) == previous[:2]:
+                        previous[2].append(blk)
                 state = states[blk].setdefault(wt, {"status": "No Data", "w": 0, "r": 0})
                 if crossing.status in ("Fail", "No Vmin", "Below") or peak > 0:
                     state["status"] = "Fail"
@@ -844,9 +854,9 @@ class Wafer:
                     state["w"] = sum(bool(row["write"]) for row in addresses.values())
                     state["r"] = sum(bool(row["read"]) for row in addresses.values())
         worst_by_block = defaultdict(list)
-        for (number, pattern), (voltage, blocks) in worst.items():
+        for (number, pattern), (voltage, relation, blocks) in worst.items():
             for blk in blocks:
-                worst_by_block[blk].append({"wt": number, "pattern": pattern, "voltage": voltage})
+                worst_by_block[blk].append({"wt": number, "pattern": pattern, "voltage": voltage, "relation": relation})
         return [{"blk": b, "trigger": chosen.get(b), "hard": b in hard, "worst_vmin": worst_by_block[b],
                  "states": [{"wt": number, **states[b].get(i, {"status": "No Data", "w": 0, "r": 0})}
                             for i, number in enumerate(self.wt_numbers)]} for b in range(BLKS)]

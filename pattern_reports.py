@@ -23,6 +23,9 @@ def voltage_units(value):
 
 
 def judge_summary(judge):
+    if judge.get("relation") == ">=":
+        return (f'Vmin ≥ {voltage_units(judge["voltage"])} (Hard Fail voltage bound)  |  '
+                f'Test {voltage_units(judge["test_voltage"])}  |  TNO {judge["tno"]}')
     if judge["tno"] is not None:
         return f'First crossing at {voltage_units(judge["voltage"])}  |  {judge["func"]}  |  TNO {judge["tno"]}'
     if judge["status"] == "Pass":
