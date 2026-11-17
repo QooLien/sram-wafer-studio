@@ -84,17 +84,17 @@ def write_figures(pdf, png, title, stations, judge, wr_matches, comparison):
         chart_title = "(b)  " + comparison["title"]
         bars.set_title(chart_title, loc="left", fontsize=17, pad=12)
         bars.set_ylabel("Fail bit count (FBC)", fontsize=16)
-        bars.set_xlabel("Test voltage / TNO (Config order)", fontsize=16)
-        labels = [f'{voltage_units(group["voltage"])} / {group["tno"]}' for group in groups]
-        bars.set_xticks(range(len(labels)), labels, rotation=35 if len(labels) > 15 else 0)
-        bars.set_xlim(-0.55, max(1, len(labels)) - 0.45)
+        bars.set_xlabel("Voltage (V)", fontsize=16, labelpad=12)
+        labels = [voltage_units(group["voltage"]) for group in groups]
+        bars.set_xticks(range(len(labels)), labels, rotation=90)
+        bars.set_xlim(-0.45, max(1, len(labels)) - 0.55)
         recorded = [row["fbc"] for group in groups for row in group["stations"]]
         bars.set_ylim(0, max(1, 1.16 * max(recorded, default=0)))
         bars.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=5))
         plotted = set()
         for index, group in enumerate(groups):
             rows = group["stations"]
-            slot = 0.82 / max(1, len(rows))
+            slot = 0.90 / max(1, len(rows))
             for i, row in enumerate(rows):
                 item = series[row["series"]]
                 series_label = item["label"]
