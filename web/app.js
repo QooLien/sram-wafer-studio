@@ -538,7 +538,7 @@ function stationLabel(station) {
   const fbc = station.fbc === null ? 'No FBC data' : 'FBC '+nfmt.format(station.fbc);
   return station.func+' · TNO '+station.tno+' · '+vfmt(station.v)+' · '+fbc;
 }
-function accumulationChart(pattern, stations, result) {
+function accumulationChart(pattern, stations, result, segments=[]) {
   const article = el('div',null,'chart-content');
   if (['Hard Fail','Prior WT','Prior Pattern','No Data'].includes(result.status)) {
     const reason = {'Hard Fail':'Excluded by Hard Fail','Prior WT':'Failed at a prior WT',
@@ -552,15 +552,25 @@ function accumulationChart(pattern, stations, result) {
   const runs = [];
   for (const [i,station] of stations.entries()) {
     const last = runs.at(-1);
-    if (last?.voltage === station.v) last.end = i;
-    else runs.push({voltage:station.v,start:i,end:i});
+    if (last?.voltage === station.v && last?.pattern === station.pattern) last.end = i;
+    else runs.push({voltage:station.v,pattern:station.pattern,start:i,end:i});
   }
   const width = Math.max(560,runs.length*66+108,stations.length*15+108);
   const chart = chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%');
   const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
   for (const run of runs) {
     chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label'},
-      run.voltage === null ? '—' : vfmt(run.voltage).slice(0,-2));
+      run.voltage === null ? '—' : vfmt(run.voltage));
+  }
+  // Keep the established axes and curve style; label merged pattern boundaries separately.
+  let offset=0;
+  for (const segment of segments) {
+    const start=offset;
+    offset+=segment.stations.length;
+    chart.add('text',{x:x((start+offset-1)/2),y:chart.tickY+16,
+      'text-anchor':'middle',class:'chart-label chart-pattern-label'},segment.name);
+    if(start>0)chart.add('line',{x1:x(start-.5),x2:x(start-.5),y1:chart.y(100),y2:chart.bottom,
+      class:'chart-pattern-divider'});
   }
   if (result.peak > 0) chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
   const points = stations.map(station=>station.accumulated*100);
@@ -576,54 +586,20 @@ function accumulationChart(pattern, stations, result) {
 function combinedAccumulation(details) {
   const names=Object.keys(details.fbc90).filter(name=>['scan','march'].includes(name.toLowerCase()));
   if(names.length!==2)return null;
-  const article=el('div',null,'chart-content');
-  const segments=names.map(name=>({name,result:details.fbc90[name],stations:details.sweep.filter(row=>row.pattern===name)}));
-  const merged=details.merged_fbc90;
-  const allStations=segments.flatMap(seg=>seg.stations);
-  const peak=Math.max(0,...allStations.map(st=>st.fbc||0));
+  const segments=names.map(name=>({name,stations:details.sweep.filter(row=>row.pattern===name)}));
+  const allStations=segments.flatMap(segment=>segment.stations);
+  const peak=Math.max(0,...allStations.map(station=>station.fbc??0));
   let running=0;
-  const mergedPoints=allStations.map(st=>{running=Math.max(running,st.fbc||0);return peak?running/peak*100:0;});
-  const usable=segments.filter(seg=>seg.stations.length&&seg.stations.every(st=>st.fbc!==null));
-  const summary=el('p',null,'chart-summary');
-  summary.textContent='Merge 90%: '+(merged?.voltage==null?(merged?.status||'No Data'):vfmt(merged.voltage)+' · TNO '+merged.tno);
-  article.append(summary);
-  if(!usable.length){article.append(el('p','Scan／March 均無可用的 FBC90% 累積資料。','tab-note'));return article;}
-  const count=segments.reduce((n,seg)=>n+seg.stations.length,0);
-  const width=Math.max(650,count*34+120);
-  const chart=chartFrame('Scan / March FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%',390,'Test Voltage (V) · Scan / March');
-  const stride=(chart.right-chart.left)/count;
-  let offset=0;
-  const mergeLine=[];
-  const colors=['#2666a4','#c2762b'];
-  for(const [index,seg] of segments.entries()){
-    const start=offset;
-    const mid=chart.left+(start+seg.stations.length/2)*stride;
-    const groupY=chart.bottom+89;
-    chart.add('text',{x:mid,y:groupY,'text-anchor':'middle',class:'chart-label chart-axis-title'},seg.name);
-    if(index>0)chart.add('line',{x1:chart.left+start*stride,x2:chart.left+start*stride,y1:chart.y(100),y2:chart.bottom+72,class:'chart-pattern-divider'});
-    const points=[];
-    for(const [i,station] of seg.stations.entries()){
-      const x=chart.left+(offset+i+.5)*stride;
-      const label=station.v===null?'—':vfmt(station.v).replace(/ V$/, 'v');
-      const tickY=chart.bottom+9;
-      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'end',class:'chart-label chart-voltage-tick'},label);
-      if(station.fbc!==null && merged?.status!=='No Data' && !['Hard Fail','Prior WT'].includes(merged?.status)){
-        const pct=mergedPoints[offset+i];
-        points.push([x,chart.y(pct)]);
-        mergeLine.push([x,chart.y(pct)]);
-        const hit=station.tno===merged?.tno;
-        chartMark(chart,'circle',{cx:x,cy:chart.y(pct),r:hit?6:4,class:hit?'chart-crossing':'chart-point',fill:hit?'#9b422e':'#fff',stroke:colors[index]},seg.name+' · '+stationLabel(station)+' · '+pct.toFixed(1)+'%');
-      }
-    }
-    if(points.length>1)chart.add('polyline',{points:points.map(p=>p.join(',')).join(' '),fill:'none',stroke:colors[index],'stroke-width':2.4});
-    offset+=seg.stations.length;
-  }
-  if(mergeLine.length>1)chart.add('polyline',{points:mergeLine.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#26384e','stroke-width':1.2,'stroke-dasharray':'3 3'});
-  chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
-  article.append(chart.wrap);
-  article.append(el('p','Merge 90%：Scan → March 依 Config 順序共用最大 FBC 作為 100%，以截至目前的最大 FBC 計算比例；兩區段分別標示。','chart-note'));
+  const stations=allStations.map(station=>{
+    running=Math.max(running,station.fbc??0);
+    return {...station,accumulated:peak?running/peak:0};
+  });
+  const result={...(details.merged_fbc90??{status:'No Data',tno:null}),peak};
+  const article=accumulationChart('Merge 90%',stations,result,segments);
+  article.append(el('p','Merge 90%：依 Config 順序合併 Scan／March，共用 Peak FBC 作為 100%，曲線使用截至當站的最大 FBC。','chart-note'));
   return article;
 }
+
 function countChart(label, unit, peak, width, height, xLabel) {
   const ceiling=Math.max(1,peak);
   const step=Math.ceil(ceiling/Math.min(4,ceiling));
@@ -819,10 +795,13 @@ async function refreshDetail(fromMatrix=false) {
   };
   const combined=combinedAccumulation(details);
   if(combined){
+    const figures=el('div',null,'pattern-charts');
+    const charts=el('div',null,'chart-pair combined-voltage');
     for(const name of Object.keys(details.fbc90).filter(n=>['scan','march'].includes(n.toLowerCase()))){
-      body.append(section(name+' FBC90% Accumulation',accumulationChart(name,details.sweep.filter(r=>r.pattern===name),details.fbc90[name])));
+      charts.append(section(name+' FBC90% Accumulation',accumulationChart(name,details.sweep.filter(r=>r.pattern===name),details.fbc90[name])));
     }
-    body.append(section('Merge 90% FBC90% Accumulation',combined));
+    charts.append(section('Merge 90% Accumulation',combined));
+    figures.append(charts);body.append(figures);
   }
   if(Object.keys(details.fbc90).length){
     s.detailPattern=initialPattern;

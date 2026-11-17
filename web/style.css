@@ -76,6 +76,8 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .chart-axis{stroke:var(--figure-ink);stroke-width:1.15}
 .chart-grid{stroke:#dde2e7;stroke-width:.9}
 .chart-threshold{stroke:#9b422e;stroke-width:1.5;stroke-dasharray:6 4}
+.chart-pattern-label{font-size:14px;font-weight:700}
+.chart-pattern-divider{stroke:#aabccf;stroke-width:1;stroke-dasharray:4 4}
 .chart-curve{fill:none;stroke:#204f78;stroke-width:2.4;stroke-linejoin:round}
 .chart-point{fill:#fff;stroke:#204f78;stroke-width:1.6}
 .chart-crossing{fill:#9b422e;stroke:#fff;stroke-width:2}
@@ -153,10 +155,11 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .worst-block-item strong{color:#ae1424}
 .pattern-static-label{font-weight:650;font-size:14px}
 
-/* Two synchronized, independently calculated Scan / March Vmin wafer maps. */
+/* Three synchronized Scan / March / Merge Vmin wafer maps. */
 .wafer.wafer-dual-host{display:block;width:100%;height:auto;min-width:0;margin:0}
 .wafer-vmin-pair{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;width:100%}
 .wafer-vmin-panel{min-width:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:#fff;overflow:auto;container-type:inline-size}
 .wafer-vmin-panel h3{text-align:center;margin:3px 0 10px;font-size:16px}
 .wafer-vmin-panel .wafer{--wafer-side:clamp(220px,min(calc(100cqi - 38px),calc(var(--visible-height,100dvh) - 80px)),var(--wafer-max));}
-@media(max-width:1100px){.wafer-vmin-pair{grid-template-columns:repeat(2,minmax(0,1fr))}}\n@media(max-width:760px){.wafer-vmin-pair{grid-template-columns:1fr}}
+@media(max-width:1100px){.wafer-vmin-pair{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.wafer-vmin-pair{grid-template-columns:1fr}}
