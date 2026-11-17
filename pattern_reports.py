@@ -84,9 +84,8 @@ def write_figures(pdf, png, title, stations, judge, wr_matches, comparison):
         chart_title = "(b)  " + comparison["title"]
         bars.set_title(chart_title, loc="left", fontsize=17, pad=12)
         bars.set_ylabel("Fail bit count (FBC)", fontsize=16)
-        if comparison["combined"]:
-            bars.set_xlabel("Test voltage (V) · High to low", fontsize=16)
-        labels = [voltage_units(group["voltage"]) for group in groups]
+        bars.set_xlabel("Test voltage / TNO (Config order)", fontsize=16)
+        labels = [f'{voltage_units(group["voltage"])} / {group["tno"]}' for group in groups]
         bars.set_xticks(range(len(labels)), labels, rotation=35 if len(labels) > 15 else 0)
         bars.set_xlim(-0.55, max(1, len(labels)) - 0.45)
         recorded = [row["fbc"] for group in groups for row in group["stations"]]
@@ -186,9 +185,9 @@ def write_workbook(path, title, stations, judge, matches, wr_matches, comparison
         if comparison_series:
             sweep.set_column("L:L", 16, volts)
             sweep.set_column(12, 11 + len(comparison_series), 24, basic)
-            sweep.write_row(0, 11, ("Voltage (V)", *(item["label"] for item in comparison_series)), header)
+            sweep.write_row(0, 11, ("Voltage / TNO", *(item["label"] for item in comparison_series)), header)
             for row_index, group in enumerate(comparison_groups, 1):
-                sweep.write_number(row_index, 11, group["voltage"])
+                sweep.write_string(row_index, 11, f'{voltage_text(group["voltage"])} V / {group["tno"]}')
                 for station in group["stations"]:
                     sweep.write_number(row_index, 12 + station["series"], station["fbc"])
 
@@ -254,9 +253,9 @@ def write_workbook(path, title, stations, judge, matches, wr_matches, comparison
             chart_row += 24
 
         if comparison_series:
-            voltage_order = "High to low" if comparison["combined"] else "Config order"
+            voltage_order = "Config order"
             chart = base_chart("column", "(b) " + comparison["title"], "Fail bit count (FBC)",
-                               x_title=f"Test voltage (V) · {voltage_order}",
+                               x_title=f"Test voltage / TNO · {voltage_order}",
                                count=len(comparison_groups), subtype="clustered")
             for index, item in enumerate(comparison_series):
                 chart.add_series({"name": item["label"],
