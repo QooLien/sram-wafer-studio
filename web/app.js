@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const chipKey = row => row.x + ',' + row.y;
@@ -137,7 +137,7 @@ for (const button of document.querySelectorAll('[data-stage]')) {
   button.onclick=()=>setMapStage(button.dataset.stage,true);
 }
 function setReport(report) {
-  s.report = report; s.wt = report.wt_numbers[0]; s.selected = null; s.block = null; s.blocks = []; s.viewPage = 0;
+  s.report = report; s.wt = report.wt_numbers[0]; s.selected = null; s.vminJudge = null; s.block = null; s.blocks = []; s.viewPage = 0;
   s.pattern = report.patterns[0] || ''; s.detailPattern = null; s.detailChart = 'fbc';
   s.layer = report.source_mode === 'address' ? 'cat' : 'fail';
   const pats = Object.fromEntries(report.patterns.map(p=>[p,p]));
@@ -266,7 +266,7 @@ function showChip(row) {
   if(!row) return put('chip-summary',el('h2','Chip 明細'),el('p','從 Wafer Map 點選一顆 Chip。'));
   const fields=[['WT','WT'+s.wt],['狀態',row.status]];
   if(s.layer === 'vmin'){
-    fields.push(['Vmin',vfmt(row.value)],['觸發 BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
+    fields.push(['判定來源',s.vminJudge?.source??'Chip Vmin'],['Vmin',vfmt(row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
       ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail 門檻',row.cutoff==null?'—':Number(row.cutoff).toFixed(2)],
       ['剩餘／資料不足',row.remaining+'／'+row.incomplete]);
   } else if(row.wr){
@@ -279,6 +279,10 @@ function showChip(row) {
   link.onclick=safe(()=>{$('filter-chip').checked=true;s.viewPage=0;return navigate('data');});
   const title=el('h2','X'+row.x+' · Y'+row.y);
   put('chip-summary',title,details,link);
+}
+function selectMapJudge(row, source) {
+  s.vminJudge=s.layer==='vmin'&&row
+    ? {source,row,wt:s.wt,chip:chipKey(row)} : null;
 }
 async function refreshMap() {
   if (!s.report) return;
@@ -314,7 +318,7 @@ async function refreshMap() {
     ? s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase())) : [];
   const dual=dualPatterns.length===2;
   board.classList.toggle('wafer-dual-host',dual);
-  const renderBoard=(target,data,scale)=>{
+  const renderBoard=(target,data,scale,source='Chip Vmin')=>{
     target.style.setProperty('--wafer-columns',nx);
     target.style.setProperty('--wafer-rows',ny);
     target.style.setProperty('--wafer-min',Math.max(nx,ny)*20+'px');
@@ -340,10 +344,13 @@ async function refreshMap() {
         s.selected=selected;s.block=null;s.blocks=[];s.detailPattern=row.pattern||s.pattern;
         put('block-detail');setMapStage('wafer');
         board.querySelectorAll('.chip').forEach(btn=>{btn.dataset.active=String(btn.dataset.chip===s.selected);});
-        showChip(row);
+        selectMapJudge(row,source);showChip(row);
         if(s.report.source_mode==='address')return;
         await refreshGrid();
-        if(s.page==='maps'&&s.selected===selected&&s.blocks.length)setMapStage('matrix',true);
+        if(s.page==='maps'&&s.selected===selected&&s.blocks.length){
+          setMapStage('matrix',true);
+          $('blk-grid').querySelector('.judge-cell')?.scrollIntoView({block:'nearest',inline:'nearest'});
+        }
       });
       target.append(chip);
     }
@@ -365,16 +372,18 @@ async function refreshMap() {
       const panel=el('section',null,'wafer-vmin-panel');
       panel.append(el('h3',pattern+' Vmin'));
       const map=el('div',null,'wafer');
-      renderBoard(map,datasets[i],commonScale);
+      renderBoard(map,datasets[i],commonScale,pattern);
       panel.append(map);pair.append(panel);
     }
     board.append(pair);
-    const selectedRows=datasets.map(data=>data.find(r=>chipKey(r)===s.selected)).filter(Boolean);
-    if(selectedRows.length)showChip(selectedRows[0]);
-    else showChip(null);
+    const sources=[...dualPatterns,'Merge 90%'];
+    const source=sources.includes(s.vminJudge?.source)?s.vminJudge.source:sources[0];
+    const selectedRow=datasets[sources.indexOf(source)].find(row=>chipKey(row)===s.selected);
+    selectMapJudge(selectedRow,source);showChip(selectedRow);
   }else{
     renderBoard(board,rows,s.vminScale);
-    showChip(rows.find(r=>chipKey(r)===s.selected));
+    const selectedRow=rows.find(row=>chipKey(row)===s.selected);
+    selectMapJudge(selectedRow,'Chip Vmin');showChip(selectedRow);
   }
   showGridVmin();
   fitMapStage();
@@ -418,9 +427,19 @@ function renderWorstBlockList() {
 function showGridVmin() {
   const cells=$('blk-grid').children;
   const worstPatterns=new Map();
+  const context=s.vminJudge;
+  const judge=s.layer==='vmin'&&context?.wt===s.wt&&context.chip===s.selected
+    &&context.row.value!=null&&Number.isInteger(context.row.blk)?context.row:null;
+  const judgeSummary=$('dist-judge');
+  judgeSummary.hidden=!judge;
+  judgeSummary.textContent=judge
+    ? 'WT'+s.wt+' · '+context.source+' · Judge BLK '+judge.blk+' · '+vfmt(judge.value)+' · TNO '+judge.tno : '';
   for(const [index,entry] of s.blocks.entries()) {
     const tile=cells[index];
     const label=tile.querySelector('.block-vmin');
+    const isJudge=judge?.blk===entry.blk;
+    tile.classList.toggle('judge-cell',isJudge);
+    tile.querySelector('.block-judge').hidden=!isJudge;
     const normal=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : vfmt(entry.trigger.voltage) : '';
     const worst=entry.worst_vmin.filter(hit=>hit.wt===s.wt);
     for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
@@ -428,7 +447,7 @@ function showGridVmin() {
     label.classList.toggle('worst',worst.length>0);
     const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).replace(/ V$/, 'v')))];
     label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
-    const title=['BLK '+entry.blk,normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
+    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vfmt(judge.value)+' · TNO '+judge.tno:'',normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
       ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
     tile.title=title;
     tile.setAttribute('aria-label',title);
@@ -455,7 +474,9 @@ async function refreshGrid() {
     btn.style.gridRow=entry.blk%16+1;btn.style.gridColumn=Math.floor(entry.blk/16)+1;
     if(entry.trigger&&!entry.hard)btn.style.background=patternColor(entry.trigger.pattern);
     const number=el('span',null,'block-number');
-    number.append(el('span','BLK ','block-prefix'),String(entry.blk));
+    const judgeBadge=el('span','J','block-judge');
+    judgeBadge.hidden=true;judgeBadge.setAttribute('aria-hidden','true');
+    number.append(judgeBadge,el('span','BLK ','block-prefix'),String(entry.blk));
     btn.append(number,el('small',null,'block-vmin'));
     const bars=el('span',null,'bands');
     bars.setAttribute('aria-hidden','true');

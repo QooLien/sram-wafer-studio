@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.9.zip](SRAM%20Analysis%20Tool%20v1.7.9.zip)
+[下載 SRAM Analysis Tool v1.7.10.zip](SRAM%20Analysis%20Tool%20v1.7.10.zip)
 
-v1.7.9 統一 Scan／March／Merge 90% 累積圖的既有圖表格式：字型、標題、間距、座標軸、線條與達標標記。Merge 保留 Pattern 分區，電壓刻度統一標示 V，並修正窄視窗 Wafer Map 排版。SRAM 判定規則維持不變。
+v1.7.10 在 256 BLK matrix 以紫色框線及 J 標記 highlight 所選 Chip Vmin Map 的 Judge BLK，並顯示判定來源、電壓及 TNO。支援 Scan／March／Merge 與原有整體 Chip Vmin；切換 Chip 或 WT 時同步更新，保留 BLK 點選明細與既有最差 BLK 標示。SRAM 判定規則維持不變。
 
 保留版本：
 
+- [v1.7.9](SRAM%20Analysis%20Tool%20v1.7.9.zip)
 - [v1.7.8](SRAM%20Analysis%20Tool%20v1.7.8.zip)
 - [v1.7.7](SRAM%20Analysis%20Tool%20v1.7.7.zip)
 - [v1.7.6](SRAM%20Analysis%20Tool%20v1.7.6.zip)
