@@ -1,6 +1,8 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.1.zip](SRAM%20Analysis%20Tool%20v1.7.1.zip)
+[下載 SRAM Analysis Tool v1.7.2.zip](SRAM%20Analysis%20Tool%20v1.7.2.zip)
+
+[保留 v1.7.1 版本](SRAM%20Analysis%20Tool%20v1.7.1.zip)
 
 [保留 v1.7 版本](SRAM%20Analysis%20Tool%20v1.7.zip)
 
