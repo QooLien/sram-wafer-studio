@@ -292,6 +292,9 @@ async function refreshMap() {
   const rows = await api(params({layer:s.layer}));
   if(id !== s.versions || s.page !== 'maps') return;
   s.vminScale=s.layer==='vmin'?vminScale(rows):null;
+  $('wafer-grid').closest('.map-layout').classList.toggle('vmin-layout',s.layer==='vmin');
+  const readableCell=data=>Math.max(34,...data.filter(row=>row.value!=null).map(row=>(vfmt(row.value).replace(/ V$/, '').length*7+8)));
+  let cellMin=s.layer==='vmin'?readableCell(rows):20;
   showKpis(rows);
   put('wt-list',...s.report.wt_numbers.map(wt=>{
     const button=el('button','WT'+wt,s.wt===wt?'active':'');
@@ -323,8 +326,8 @@ async function refreshMap() {
   const renderBoard=(target,data,scale,source='Chip Vmin')=>{
     target.style.setProperty('--wafer-columns',nx);
     target.style.setProperty('--wafer-rows',ny);
-    target.style.setProperty('--wafer-min',Math.max(nx,ny)*20+'px');
-    target.style.setProperty('--wafer-max',Math.min(660,Math.min(nx,ny)*66)+'px');
+    target.style.setProperty('--wafer-min',Math.max(nx,ny)*cellMin+'px');
+    target.style.setProperty('--wafer-max',Math.max(Math.max(nx,ny)*cellMin,Math.min(s.layer==='vmin'?900:660,Math.min(nx,ny)*66))+'px');
     const axis=(text,col,row)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=row;target.append(a);};
     axis('Y/X',1,1);
     for(let x=x0;x<=x1;x++)axis(x,x-x0+2,1);
@@ -340,7 +343,15 @@ async function refreshMap() {
       chip.title='X'+row.x+' Y'+row.y+' · '+row.status+(row.value!=null?' · '+vminfmt(row,row.value):'');
       chip.setAttribute('aria-label',chip.title);
       chip.dataset.active=String(s.selected===chipKey(row));
-      for(const [value,bg,fg] of values){const span=el('span',value);span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span);}
+      for(const [value,bg,fg] of values){
+        const span=el('span',value);
+        if(s.layer==='vmin'&&row.value!=null){
+          span.className='chip-vmin-label';span.replaceChildren();
+          if(row.relation==='>=')span.append(el('span','≥ ','chip-relation'));
+          span.append(el('span',vfmt(row.value).replace(/ V$/, ''),'chip-number'));
+        }
+        span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span);
+      }
       chip.onclick=safe(async()=>{
         const selected=chipKey(row);
         s.selected=selected;s.block=null;s.blocks=[];s.detailPattern=row.pattern||s.pattern;
@@ -362,6 +373,8 @@ async function refreshMap() {
     const datasets=await Promise.all([...dualPatterns.map(pattern=>api(params({view:'map',layer:'vmin_pattern',pattern}))),api(params({view:'map',layer:'vmin_merge'}))]);
     if(id!==s.versions||s.page!=='maps')return;
     const allValues=datasets.flat();
+    cellMin=readableCell(allValues);
+    pair.style.setProperty('--vmin-panel-min',Math.max(280,Math.max(nx,ny)*cellMin+56)+'px');
     const commonScale=vminScale(allValues);
     s.vminScale=commonScale;
     renderLegend('map-legend',commonScale?[

@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.15.zip](SRAM%20Analysis%20Tool%20v1.7.15.zip)
+[下載 SRAM Analysis Tool v1.7.16.zip](SRAM%20Analysis%20Tool%20v1.7.16.zip)
 
-v1.7.15 將 Scan／March／Merge 累積圖與 FBC 柱圖改為緊湊的等寬連續電壓區間，保留各 TNO、Config 順序與原始 FBC。每區間加上垂直格線，密集刻度自動直排／分列，圖寬隨視窗配置，不再因站數增加而產生超寬畫布。Vmin 與 FBC90% 判定不變。
+v1.7.16 統一 Wafer Map 為 Segoe UI／Microsoft JhengHei 字型，數字採等寬數字排版。Vmin Map 依 Chip 數值所需字寬自動換列，側欄移至下方，並允許 ≥ 與數值分行，修正 ≥ 1.20 等標籤裁切。保留完整數值精度、X/Y、共用色階及 Judge BLK 點選互動，分析規則不變。
 
 保留版本：
 
+- [v1.7.15](SRAM%20Analysis%20Tool%20v1.7.15.zip)
 - [v1.7.14](SRAM%20Analysis%20Tool%20v1.7.14.zip)
 - [v1.7.13](SRAM%20Analysis%20Tool%20v1.7.13.zip)
 - [v1.7.12](SRAM%20Analysis%20Tool%20v1.7.12.zip)

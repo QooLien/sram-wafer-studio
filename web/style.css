@@ -30,7 +30,7 @@ main{min-width:0}.top{position:sticky;top:0;z-index:10;min-height:52px;backgroun
   grid-template-columns:27px repeat(var(--wafer-columns),minmax(0,1fr));
   grid-template-rows:21px repeat(var(--wafer-rows),minmax(0,1fr));
 }
-.wafer:empty{display:none}.axis{display:grid;place-items:center;color:#697f93;font:12px ui-monospace,Consolas,monospace}.chip{padding:0;display:grid;place-items:stretch;border:1px solid #a1b3c4;border-radius:3px;overflow:hidden;font:650 13px ui-monospace,Consolas,monospace;background:#fff}.chip span{display:grid;place-items:center;min-width:0}.chip.quad{grid-template:repeat(2,1fr)/repeat(2,1fr);font-size:11px}.chip.half{grid-template-columns:1fr 1fr;font-size:11px}.chip.quad span,.chip.half span{outline:1px dotted #c7d2dd}.chip[data-active=true],.chip:hover{outline:2px solid var(--accent);z-index:1}.chip[data-active=true]{outline-offset:1px}.chip:focus-visible{outline-offset:1px}
+.wafer:empty{display:none}.axis{display:grid;place-items:center;color:#697f93;font:500 12px "Segoe UI","Microsoft JhengHei",sans-serif}.chip{padding:0;display:grid;place-items:stretch;border:1px solid #a1b3c4;border-radius:3px;overflow:hidden;font:600 12px/1.15 "Segoe UI","Microsoft JhengHei",sans-serif;background:#fff}.chip span{display:grid;place-items:center;min-width:0}.chip.quad{grid-template:repeat(2,1fr)/repeat(2,1fr);font-size:11px}.chip.half{grid-template-columns:1fr 1fr;font-size:11px}.chip.quad span,.chip.half span{outline:1px dotted #c7d2dd}.chip[data-active=true],.chip:hover{outline:2px solid var(--accent);z-index:1}.chip[data-active=true]{outline-offset:1px}.chip:focus-visible{outline-offset:1px}
 .chip-card{padding:16px;align-self:start}.chip-card h2{margin-bottom:8px}.chip-card dl{margin:12px 0}.chip-card dl>div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #e8eef3;padding:8px 0}.chip-card dt{color:var(--muted)}.chip-card dd{margin:0;font-weight:650;text-align:right}.chip-card button{width:100%}.distribution .section-title{flex-wrap:wrap;gap:5px 16px;padding:11px 15px}
 .distribution .section-title .legend{padding:5px 0}
 .distribution .section-title h2{font-size:19px}
@@ -166,15 +166,25 @@ text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
 
 /* Three synchronized Scan / March / Merge Vmin wafer maps. */
 .wafer.wafer-dual-host{display:block;width:100%;height:auto;min-width:0;margin:0}
-.wafer-vmin-pair{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;width:100%}
+.wafer-vmin-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--vmin-panel-min,280px)),1fr));gap:14px;width:100%}
 .wafer-vmin-panel{min-width:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:#fff;overflow:auto;container-type:inline-size}
 .wafer-vmin-panel h3{text-align:center;margin:3px 0 10px;font-size:16px}
-.wafer-vmin-panel .wafer{--wafer-side:clamp(220px,min(calc(100cqi - 38px),calc(var(--visible-height,100dvh) - 80px)),var(--wafer-max));}
-@media(max-width:1100px){.wafer-vmin-pair{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:760px){.wafer-vmin-pair{grid-template-columns:1fr}}
+.wafer-vmin-panel .wafer{--wafer-side:clamp(var(--wafer-min),min(calc(100cqi - 38px),calc(var(--visible-height,100dvh) - 80px)),var(--wafer-max));}
+
 
 /* Compact voltage intervals fit the viewport while retaining all Config stations. */
 .plot.voltage-fit{overflow-x:hidden}
 .plot.voltage-fit svg{min-width:0!important;max-height:none;width:100%}
 .chart-voltage-grid{stroke:#c7d3df;stroke-width:.8;stroke-dasharray:3 3}
 .chart-voltage-label{font-size:14px}
+
+/* Use the application UI font and preserve complete numeric Chip labels. */
+.wafer,.wafer-vmin-panel h3{font-family:"Segoe UI","Microsoft JhengHei",sans-serif}
+.chip{font-variant-numeric:tabular-nums;letter-spacing:0}
+.chip>span{padding:1px;white-space:normal;line-height:1.15;overflow-wrap:normal}
+.chip .chip-vmin-label{display:flex;flex-wrap:wrap;align-content:center;align-items:center;justify-content:center;column-gap:1px;row-gap:0}
+.chip-vmin-label .chip-number,.chip-vmin-label .chip-relation{display:inline;white-space:nowrap;padding:0}
+.chip-vmin-label .chip-relation{font-weight:700}
+.map-layout.vmin-layout{grid-template-columns:minmax(0,1fr)}
+.vmin-layout .map-inspector{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.wafer-vmin-panel h3{font-weight:600;line-height:1.4;margin:2px 0 12px}
