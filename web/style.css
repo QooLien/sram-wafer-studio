@@ -84,6 +84,10 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .chart-pattern-label{font-size:14px;font-weight:700}
 .chart-pattern-divider{stroke:#aabccf;stroke-width:1;stroke-dasharray:4 4}
 .chart-curve{fill:none;stroke:#204f78;stroke-width:2.4;stroke-linejoin:round}
+.chart-fbc-axis{stroke:#c2762b}
+text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
+.chart-fbc-curve{fill:none;stroke:#c2762b;stroke-width:1.8;stroke-dasharray:5 3}
+.chart-fbc-point{fill:#fff;stroke:#c2762b;stroke-width:1.4}
 .chart-point{fill:#fff;stroke:#204f78;stroke-width:1.6}
 .chart-crossing{fill:#9b422e;stroke:#fff;stroke-width:2}
 .chart-bar{stroke:var(--figure-ink);stroke-width:.65}

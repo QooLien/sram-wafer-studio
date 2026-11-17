@@ -522,7 +522,7 @@ function section(title, node, collapsible=false) {
   } else block.append(caption,sc);
   return block;
 }
-function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order', footer=null) {
+function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order', footer=null, rightMargin=35) {
   const wrap = el('div', null, 'plot');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -538,7 +538,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - 35, bottom = height - (footer?.margin??(xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74)), top = 43, tickY = footer?bottom+26:height-48;
+  const left = 80, right = width - rightMargin, bottom = height - (footer?.margin??(xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74)), top = 43, tickY = footer?bottom+26:height-48;
   const y = value => bottom - value / maximum * (bottom-top);
   add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
@@ -604,10 +604,11 @@ function accumulationChart(pattern, stations, result, segments=[]) {
       stride=Math.max(stride,((labelWidths[i-1]+labelWidths[i])/2+12)/gap);
     }
   }
-  const width=Math.max(560,Math.ceil(stations.length*stride)+115);
+  const rightMargin=Math.max(100,nfmt.format(result.peak).length*10+24);
+  const width=Math.max(560,Math.ceil(stations.length*stride)+80+rightMargin);
   const grouped=segments.length>0;
   const chart=chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],
-    width,n=>n+'%',grouped?354:318,'Test Voltage (V) · Config Order',grouped?{margin:110}:null);
+    width,n=>n+'%',grouped?354:318,'Test Voltage (V) · Config Order',grouped?{margin:110}:null,rightMargin);
   const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
   for (const [i,run] of runs.entries()) {
     chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label chart-voltage-label'},labels[i]);
@@ -623,6 +624,28 @@ function accumulationChart(pattern, stations, result, segments=[]) {
       class:'chart-pattern-divider'});
   }
   if (result.peak > 0) chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
+  // The right axis uses the same Peak as the percentage curve, while the raw series may fall.
+  chart.add('line',{x1:chart.right,x2:chart.right,y1:chart.y(100),y2:chart.bottom,class:'chart-axis chart-fbc-axis'});
+  chart.add('text',{x:width-12,y:24,'text-anchor':'end',class:'chart-label chart-axis-title chart-fbc-axis'},'Fail bit count (FBC)');
+  const fbcTicks=[...new Set([0,.25,.5,.75,1].map(fraction=>Math.round(result.peak*fraction)))];
+  for(const count of fbcTicks){
+    const y=chart.y(result.peak?count/result.peak*100:0);
+    chart.add('line',{x1:chart.right,x2:chart.right+5,y1:y,y2:y,class:'chart-axis chart-fbc-axis'});
+    chart.add('text',{x:chart.right+10,y:y+5,class:'chart-label chart-fbc-tick'},nfmt.format(count));
+  }
+  let raw=[];
+  const flushRaw=()=>{
+    if(raw.length)chart.add('polyline',{points:raw.join(' '),class:'chart-fbc-curve'});
+    raw=[];
+  };
+  for(const [i,station] of stations.entries()){
+    if(station.fbc==null){flushRaw();continue;}
+    const y=chart.y(result.peak?station.fbc/result.peak*100:0);
+    raw.push(x(i)+','+y);
+    chartMark(chart,'rect',{x:x(i)-3.5,y:y-3.5,width:7,height:7,class:'chart-fbc-point'},
+      (station.pattern?station.pattern+' · ':'')+stationLabel(station)+' · Raw FBC (right axis)');
+  }
+  flushRaw();
   const points = stations.map(station=>station.accumulated*100);
   chart.add('polyline',{points:points.map((pct,i)=>x(i)+','+chart.y(pct)).join(' '),class:'chart-curve'});
   for (const [i,station] of stations.entries()) {
@@ -630,7 +653,7 @@ function accumulationChart(pattern, stations, result, segments=[]) {
     chartMark(chart,'circle',{cx:x(i),cy:chart.y(points[i]),r:hit?7:4.5,
       class:hit?'chart-crossing':'chart-point'},stationLabel(station)+' · '+points[i].toFixed(1)+'%');
   }
-  article.append(chart.wrap);
+  article.append(chartLegend(['Running maximum (%) · left axis','Raw FBC · right axis'],['#204f78','#c2762b']),chart.wrap);
   return article;
 }
 function combinedAccumulation(details) {

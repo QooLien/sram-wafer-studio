@@ -11,6 +11,7 @@ from exports import output_path
 
 CURVE = "#204f78"
 THRESHOLD = "#9b422e"
+RAW_FBC = "#c2762b"
 INK = "#202630"
 GRID = "#dde2e7"
 HATCHES = ("", "//", "..", "xx", "\\\\", "++", "oo")
@@ -70,8 +71,20 @@ def write_figures(pdf, png, title, stations, judge, wr_matches, comparison):
         curve.set_xlim(-0.55, max(0.55, len(stations) - 0.45))
         if stations[0]["accumulated"] is not None:
             y = [row["accumulated"] for row in stations]
-            curve.plot(range(len(y)), y, color=CURVE, marker="o", markerfacecolor="white",
-                       markersize=5, linewidth=1.9, zorder=3)
+            cumulative_line, = curve.plot(range(len(y)), y, color=CURVE, marker="o", markerfacecolor="white",
+                       markersize=5, linewidth=1.9, zorder=3, label="Running maximum (%)")
+            peak = judge["peak"]
+            fbc_axis = curve.twinx()
+            fbc_axis.set_ylim(0, max(1, peak) * 1.06)
+            fbc_axis.set_yticks(sorted({round(peak * fraction) for fraction in (0, .25, .5, .75, 1)}))
+            fbc_axis.set_ylabel("Fail bit count (FBC)", fontsize=16, color=RAW_FBC)
+            fbc_axis.tick_params(axis="y", colors=RAW_FBC, labelsize=14)
+            fbc_axis.spines[["top", "left", "bottom"]].set_visible(False)
+            fbc_axis.spines["right"].set_color(RAW_FBC)
+            raw_line, = fbc_axis.plot(range(len(stations)), [row["fbc"] for row in stations],
+                                     color=RAW_FBC, linestyle="--", marker="s", markerfacecolor="white",
+                                     markersize=4, linewidth=1.4, label="Raw FBC (right axis)")
+            curve.legend(handles=[cumulative_line, raw_line], loc="lower right", fontsize=11)
             if judge["tno"] is not None:
                 hit = next(i for i, row in enumerate(stations) if row["tno"] == judge["tno"])
                 curve.axhline(0.9, color=THRESHOLD, linestyle=(0, (5, 3)), linewidth=1.1)
@@ -241,6 +254,15 @@ def write_workbook(path, title, stations, judge, matches, wr_matches, comparison
                               "values": ["Sweep Data", 1, 7, last, 7], "line": {"color": CURVE, "width": 2},
                               "marker": {"type": "circle", "size": 5, "fill": {"color": "#ffffff"},
                                          "border": {"color": CURVE}}})
+            chart.add_series({"name": "Raw FBC (right axis)", "categories": categories,
+                              "values": ["Sweep Data", 1, 6, last, 6], "y2_axis": True,
+                              "line": {"color": RAW_FBC, "width": 1.5, "dash_type": "dash"},
+                              "marker": {"type": "square", "size": 4, "fill": {"color": "#ffffff"},
+                                         "border": {"color": RAW_FBC}}})
+            chart.set_y2_axis({"name": "Fail bit count (FBC)", "name_font": axis_title | {"color": RAW_FBC},
+                               "num_font": font | {"color": RAW_FBC}, "min": 0, "max": max(1, judge["peak"]),
+                               "num_format": "0", "major_unit": max(1, (judge["peak"] + 3) // 4),
+                               "major_gridlines": {"visible": False}, "line": {"color": RAW_FBC}})
             if judge["tno"] is not None:
                 chart.add_series({"name": "90% threshold", "categories": categories,
                                   "values": ["Sweep Data", 1, 8, last, 8],

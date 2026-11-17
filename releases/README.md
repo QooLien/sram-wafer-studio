@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.11.zip](SRAM%20Analysis%20Tool%20v1.7.11.zip)
+[下載 SRAM Analysis Tool v1.7.12.zip](SRAM%20Analysis%20Tool%20v1.7.12.zip)
 
-v1.7.11 修正 Merge 90% Accumulation 在 Scan／March 站數不均時的電壓刻度重疊，並分開電壓、Pattern 與座標軸標題的垂直間距。matrix 的空電壓改為具體狀態，BLK 明細增加判定說明，區分 FBC0 無前一電壓、Pass、缺資料及排除原因。SRAM 判定規則維持不變。
+v1.7.12 為 Scan／March／Merge FBC90% 累積圖加入右側 Fail bit count (FBC) 副座標軸與橘色原始 FBC 虛線。左軸保留 running maximum 累積百分比，右軸以各圖 Peak 為上限，Merge 共用 Peak。Pattern PDF／PNG／Excel 圖表同步支援右軸；缺資料與排除規則維持不變。
 
 保留版本：
 
+- [v1.7.11](SRAM%20Analysis%20Tool%20v1.7.11.zip)
 - [v1.7.10](SRAM%20Analysis%20Tool%20v1.7.10.zip)
 - [v1.7.9](SRAM%20Analysis%20Tool%20v1.7.9.zip)
 - [v1.7.8](SRAM%20Analysis%20Tool%20v1.7.8.zip)
