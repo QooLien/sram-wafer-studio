@@ -715,8 +715,8 @@ async function refreshDetail(fromMatrix=false) {
   sweep.open=Boolean(march);
   const showTables=(pattern,stations)=>{
     sweepData.replaceChildren(table(['Pattern','TNO','Func.','Test Voltage','FBC','狀態'],
-      stations.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])));
-    const addresses=details.addresses.filter(r=>r.pattern===pattern).map(r=>{
+      details.sweep.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])));
+    const addresses=details.addresses.map(r=>{
       const cell=el('td'), btn=el('button','查看地址','quiet');
       btn.onclick=safe(()=>{
         $('data-view').value='address';$('filter-chip').checked=true;
@@ -731,7 +731,7 @@ async function refreshDetail(fromMatrix=false) {
   };
   if(Object.keys(details.fbc90).length){
     s.detailPattern=initialPattern;
-    body.append(patternCharts(details,initialPattern,showTables));
+    for(const name of Object.keys(details.fbc90))body.append(patternCharts(details,name,showTables));
   }
   const block=s.blocks[s.block];
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
