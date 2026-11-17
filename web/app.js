@@ -481,7 +481,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - 35, bottom = height - (xLabel === 'Voltage (V)' ? 112 : 74), top = 43, tickY = height - 48;
+  const left = 80, right = width - 35, bottom = height - (xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74), top = 43, tickY = height - 48;
   const y = value => bottom - value / maximum * (bottom-top);
   add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
@@ -556,15 +556,15 @@ function combinedAccumulation(details) {
   for(const [index,seg] of segments.entries()){
     const start=offset;
     const mid=chart.left+(start+seg.stations.length/2)*stride;
-    const groupY=chart.bottom+81;
+    const groupY=chart.bottom+89;
     chart.add('text',{x:mid,y:groupY,'text-anchor':'middle',class:'chart-label chart-axis-title'},seg.name);
-    if(index>0)chart.add('line',{x1:chart.left+start*stride,x2:chart.left+start*stride,y1:chart.y(100),y2:chart.bottom+65,class:'chart-pattern-divider'});
+    if(index>0)chart.add('line',{x1:chart.left+start*stride,x2:chart.left+start*stride,y1:chart.y(100),y2:chart.bottom+72,class:'chart-pattern-divider'});
     const points=[];
     for(const [i,station] of seg.stations.entries()){
       const x=chart.left+(offset+i+.5)*stride;
       const label=station.v===null?'—':vfmt(station.v).replace(/ V$/, 'v');
-      const tickY=chart.bottom+10;
-      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'end',class:'chart-label chart-voltage-tick'},label);
+      const tickY=chart.bottom+75;
+      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'start',class:'chart-label chart-voltage-tick'},label);
       if(station.accumulated!==null){
         const pct=station.accumulated*100;
         points.push([x,chart.y(pct)]);
