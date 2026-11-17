@@ -563,8 +563,8 @@ function combinedAccumulation(details) {
     for(const [i,station] of seg.stations.entries()){
       const x=chart.left+(offset+i+.5)*stride;
       const label=station.v===null?'—':vfmt(station.v).replace(/ V$/, 'v');
-      const tickY=chart.bottom+75;
-      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'start',class:'chart-label chart-voltage-tick'},label);
+      const tickY=chart.bottom+9;
+      chart.add('text',{x,y:tickY,transform:'rotate(-90 '+x+' '+tickY+')','text-anchor':'end',class:'chart-label chart-voltage-tick'},label);
       if(station.accumulated!==null){
         const pct=station.accumulated*100;
         points.push([x,chart.y(pct)]);
