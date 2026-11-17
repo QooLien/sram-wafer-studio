@@ -707,6 +707,26 @@ class Wafer:
                 "pattern": pattern, "cutoff": cutoff, "tail": tail, "hard": list(bits(hard)),
                 "prior": past.bit_count(), "remaining": len(kept), "incomplete": incomplete}
 
+    def pattern_chip_vmin(self, wt, chip, pattern):
+        """Per-pattern worst eligible BLK Vmin, using the existing chip Tail filter."""
+        aggregate = self.chip_vmin(wt, chip)
+        tail = set(aggregate["tail"])
+        candidates = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip)
+                      if name == pattern and blk not in tail and crossing.voltage is not None]
+        winner = max(candidates, key=lambda item: (item[1].voltage, -item[0]), default=None)
+        if winner is None:
+            return {"status": "No Vmin", "voltage": None, "value": None, "blk": None,
+                    "tno": None, "func": None, "pattern": pattern,
+                    "tail": aggregate["tail"], "hard": aggregate["hard"],
+                    "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
+                    "incomplete": aggregate["incomplete"]}
+        blk, crossing = winner
+        return {"status": "Vmin", "voltage": crossing.voltage, "value": crossing.voltage,
+                "blk": blk, "tno": crossing.tno, "func": crossing.func, "pattern": pattern,
+                "tail": aggregate["tail"], "hard": aggregate["hard"],
+                "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
+                "incomplete": aggregate["incomplete"]}
+
     @cached_property
     def all_vmin(self):
         return {(wt, chip): self.chip_vmin(wt, chip)
@@ -721,8 +741,9 @@ class Wafer:
             if kind in ("cat", "repair"):
                 cat = self.cat(wt, chip, kind == "repair")
                 row |= {"value": cat, "status": f"C{cat}" if cat else "No Data"}
-            elif kind == "vmin":
-                result = self.all_vmin[wt, chip]
+            elif kind in ("vmin", "vmin_pattern"):
+                result = (self.pattern_chip_vmin(wt, chip, pattern) if kind == "vmin_pattern"
+                          else self.all_vmin[wt, chip])
                 row |= result | {"value": result["voltage"]}
             else:
                 mask = self.fail_maps[wt, pattern, chip]
