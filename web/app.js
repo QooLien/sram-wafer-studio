@@ -219,6 +219,22 @@ $('open-xlsm').onclick = safe(async()=>{
 function params(extra) {
   return 'view?'+new URLSearchParams({wt:s.wt,pattern:s.pattern,...extra}).toString();
 }
+// Relative Vmin heatmap, recalculated for each WT. Null-status chips stay categorical.
+function vminScale(rows) {
+  const values=rows.map(row=>row.value).filter(value=>typeof value==='number'&&Number.isFinite(value)).sort((a,b)=>a-b);
+  if (!values.length) return null;
+  const min=values[0], max=values[values.length-1];
+  const median=values[Math.floor((values.length-1)/2)];
+  const stops=[[57,166,99],[255,221,87],[214,69,65]];
+  const color=value=>{
+    if(max===min)return '#f3d86b';
+    const t=Math.max(0,Math.min(1,(value-min)/(max-min)));
+    const position=t<=.5?t*2:(t-.5)*2;
+    const from=stops[t<=.5?0:1],to=stops[t<=.5?1:2];
+    return '#'+from.map((channel,i)=>Math.round(channel+(to[i]-channel)*position).toString(16).padStart(2,'0')).join('');
+  };
+  return {min,median,max,color};
+}
 function tint(row) {
   const val = row.value;
   if (s.layer === 'cat' || s.layer === 'repair') {
@@ -226,7 +242,7 @@ function tint(row) {
       12:'#dbaddb',13:'#dbaddb',14:'#ffd966',15:'#d9d2e9',16:'#d9d2e9',17:'#d9d2e9',18:'#ffe699',19:'#9bc2e6',20:'#bfbfbf'};
     return [[val ?? '—',colors[val] || (val>=5&&val<=8?'#f8cbad':'#eef3f7')]];
   }
-  if(s.layer === 'vmin') return [[val === null ? row.status : vfmt(val).split(' ')[0],val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : '#f8cbad']];
+  if(s.layer === 'vmin') return [[val === null ? row.status : vfmt(val).split(' ')[0],val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : (s.vminScale?.color(val) ?? '#f3d86b')]];
   if(row.gray) return [['','#808080']];
   if(row.blue) return [['','#00b0f0']];
   if(s.layer === 'wr') return row.wr.map((v,i)=>[v||'',v?['#fff','#ffd966','#ff6600','#fff'][i]:'#fff',i === 3?'#8c8c8c':'']);
@@ -269,6 +285,7 @@ async function refreshMap() {
   const id=++s.versions;
   const rows = await api(params({layer:s.layer}));
   if(id !== s.versions || s.page !== 'maps') return;
+  s.vminScale=s.layer==='vmin'?vminScale(rows):null;
   showKpis(rows);
   put('wt-list',...s.report.wt_numbers.map(wt=>{
     const button=el('button','WT'+wt,s.wt===wt?'active':'');
@@ -282,7 +299,11 @@ async function refreshMap() {
     loss:[['#fff','Left: Fail BLK'],['#ff433c','Right: Loss BLK'],['#00b0f0','All blocks pass']],
     cat:[['#c6efce','C1–2'],['#bdd7ee','C3–4'],['#f8cbad','C5–8'],['#ff9999','C9'],['#bfbfbf','C10–11 / C20']],
     repair:[['#c6efce','C1–2'],['#f8cbad','C5–8'],['#ff9999','C9']],
-    vmin:[['#f8cbad','Valid Vmin (V)'],['#dbeafe','Pass'],['#e2e8f0','Data / threshold status']]};
+    vmin:[...(s.vminScale?[
+      [s.vminScale.color(s.vminScale.min),'Low '+vfmt(s.vminScale.min)],
+      [s.vminScale.color(s.vminScale.median),'Median '+vfmt(s.vminScale.median)],
+      [s.vminScale.color(s.vminScale.max),'High '+vfmt(s.vminScale.max)]]:[['#f3d86b','No valid Vmin']]),
+      ['#dbeafe','Pass'],['#e2e8f0','Data / threshold status']]};
   renderLegend('map-legend',legend[s.layer]);
   const x0=Math.min(...rows.map(r=>r.x)), x1=Math.max(...rows.map(r=>r.x));
   const y0=Math.min(...rows.map(r=>r.y)), y1=Math.max(...rows.map(r=>r.y));
