@@ -7,8 +7,8 @@ import subprocess
 def main():
     root = Path(__file__).resolve().parent.parent
     version = (root / "VERSION").read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"[0-9]+\.[0-9]", version):
-        raise SystemExit("VERSION must use X.Y with one decimal digit.")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version):
+        raise SystemExit("VERSION must use X.Y or X.Y.Z.")
     name = f"SRAM Analysis Tool v{version}"
     folder = root / "releases"
     folder.mkdir(exist_ok=True)
