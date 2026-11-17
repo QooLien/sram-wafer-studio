@@ -516,12 +516,12 @@ function voltageDistribution(comparison) {
   const groupWidth=Math.max(65,...groups.map(group=>group.stations.length*15+14));
   const width=Math.max(560,groups.length*groupWidth+108);
   const peak=Math.max(...groups.flatMap(group=>group.stations.map(row=>row.fbc)));
-  const chart=countChart(title,'FBC',peak,width,undefined,combined?'Test Voltage (V) · High to Low':undefined);
+  const chart=countChart(title,'FBC',peak,width,undefined,'Test Voltage / TNO · Config order');
   const stride=(chart.right-chart.left)/groups.length;
   for (const [index,group] of groups.entries()) {
     const mid=chart.left+(index+.5)*stride;
     const slot=Math.min(20,(stride-12)/Math.max(1,group.stations.length));
-    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(group.voltage).slice(0,-2));
+    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(group.voltage).slice(0,-2)+' / '+group.tno);
     for (const [i,station] of group.stations.entries()) {
       const height=chart.bottom-chart.y(station.fbc);
       const item=series[station.series];
