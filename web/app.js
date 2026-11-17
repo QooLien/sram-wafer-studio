@@ -310,36 +310,71 @@ async function refreshMap() {
   const nx=x1-x0+1,ny=y1-y0+1;
   if(Math.max(nx,ny)>100) throw new Error('Wafer Map 座標範圍超過 100。');
   const board=$('wafer-grid');board.replaceChildren();
-  board.style.setProperty('--wafer-columns', nx);
-  board.style.setProperty('--wafer-rows', ny);
-  board.style.setProperty('--wafer-min', Math.max(nx, ny) * 20 + 'px');
-  board.style.setProperty('--wafer-max', Math.min(660, Math.min(nx, ny) * 66) + 'px');
-  const axis=(text,col,row)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=row;board.append(a);};
-  axis('Y/X',1,1);
-  for(let x=x0;x<=x1;x++) axis(x,x-x0+2,1);
-  for(let y=y0;y<=y1;y++) axis(y,1,y-y0+2);
-  for(const row of rows){
-    const values=tint(row);
-    const chip=el('button',null,'chip'+(values.length===4?' quad':values.length===2?' half':''));
-    chip.dataset.chip=chipKey(row);
-    chip.style.gridColumn=row.x-x0+2;chip.style.gridRow=row.y-y0+2;
-    chip.title='X'+row.x+' Y'+row.y+' · '+row.status+(row.value!=null?' · '+row.value:'');
-    chip.setAttribute('aria-label',chip.title);
-    chip.dataset.active=String(s.selected===chipKey(row));
-    for(const [value,bg,fg] of values){ const span=el('span',value);span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span); }
-    chip.onclick=safe(async()=>{
-      const selected = chipKey(row);
-      s.selected=selected;s.block=null;s.blocks=[];s.detailPattern=s.pattern;
-      put('block-detail');setMapStage('wafer');
-      board.querySelectorAll('.chip').forEach(btn=>{btn.dataset.active=String(btn.dataset.chip===s.selected);});
-      showChip(row);
-      if(s.report.source_mode==='address')return;
-      await refreshGrid();
-      if(s.page==='maps'&&s.selected===selected&&s.blocks.length)setMapStage('matrix',true);
-    });
-    board.append(chip);
+  const dualPatterns=s.layer==='vmin'
+    ? s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase())) : [];
+  const dual=dualPatterns.length===2;
+  const renderBoard=(target,data,scale)=>{
+    target.style.setProperty('--wafer-columns',nx);
+    target.style.setProperty('--wafer-rows',ny);
+    target.style.setProperty('--wafer-min',Math.max(nx,ny)*20+'px');
+    target.style.setProperty('--wafer-max',Math.min(660,Math.min(nx,ny)*66)+'px');
+    const axis=(text,col,row)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=row;target.append(a);};
+    axis('Y/X',1,1);
+    for(let x=x0;x<=x1;x++)axis(x,x-x0+2,1);
+    for(let y=y0;y<=y1;y++)axis(y,1,y-y0+2);
+    for(const row of data){
+      const values=s.layer==='vmin'
+        ? [[row.value===null?row.status:vfmt(row.value).split(' ')[0],
+            row.value===null?(row.status==='Pass'?'#dbeafe':'#e2e8f0'):(scale?.color(row.value)??'#f3d86b')]]
+        : tint(row);
+      const chip=el('button',null,'chip'+(values.length===4?' quad':values.length===2?' half':''));
+      chip.dataset.chip=chipKey(row);
+      chip.style.gridColumn=row.x-x0+2;chip.style.gridRow=row.y-y0+2;
+      chip.title='X'+row.x+' Y'+row.y+' · '+row.status+(row.value!=null?' · '+vfmt(row.value):'');
+      chip.setAttribute('aria-label',chip.title);
+      chip.dataset.active=String(s.selected===chipKey(row));
+      for(const [value,bg,fg] of values){const span=el('span',value);span.style.backgroundColor=bg;if(fg)span.style.color=fg;chip.append(span);}
+      chip.onclick=safe(async()=>{
+        const selected=chipKey(row);
+        s.selected=selected;s.block=null;s.blocks=[];s.detailPattern=row.pattern||s.pattern;
+        put('block-detail');setMapStage('wafer');
+        board.querySelectorAll('.chip').forEach(btn=>{btn.dataset.active=String(btn.dataset.chip===s.selected);});
+        showChip(row);
+        if(s.report.source_mode==='address')return;
+        await refreshGrid();
+        if(s.page==='maps'&&s.selected===selected&&s.blocks.length)setMapStage('matrix',true);
+      });
+      target.append(chip);
+    }
+  };
+  if(dual){
+    const pair=el('div',null,'wafer-vmin-pair');
+    const datasets=await Promise.all(dualPatterns.map(pattern=>api(params({view:'map',layer:'vmin_pattern',pattern}))));
+    if(id!==s.versions||s.page!=='maps')return;
+    const allValues=datasets.flat();
+    const commonScale=vminScale(allValues);
+    s.vminScale=commonScale;
+    renderLegend('map-legend',commonScale?[
+      [commonScale.color(commonScale.min),'Low '+vfmt(commonScale.min)],
+      [commonScale.color(commonScale.median),'Median '+vfmt(commonScale.median)],
+      [commonScale.color(commonScale.max),'High '+vfmt(commonScale.max)],
+      ['#dbeafe','Pass'],['#e2e8f0','No Data / status']
+    ]:[['#f3d86b','No valid Vmin']]);
+    for(const [i,pattern] of dualPatterns.entries()){
+      const panel=el('section',null,'wafer-vmin-panel');
+      panel.append(el('h3',pattern+' Vmin'));
+      const map=el('div',null,'wafer');
+      renderBoard(map,datasets[i],commonScale);
+      panel.append(map);pair.append(panel);
+    }
+    board.append(pair);
+    const selectedRows=datasets.map(data=>data.find(r=>chipKey(r)===s.selected)).filter(Boolean);
+    if(selectedRows.length)showChip(selectedRows[0]);
+    else showChip(null);
+  }else{
+    renderBoard(board,rows,s.vminScale);
+    showChip(rows.find(r=>chipKey(r)===s.selected));
   }
-  showChip(rows.find(r=>chipKey(r)===s.selected));
   showGridVmin();
   fitMapStage();
 }
