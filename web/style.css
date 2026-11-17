@@ -141,3 +141,14 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .address-table :is(th,td):nth-child(6){left:calc(var(--address-key)*5)}
 .address-table :is(th,td):nth-child(7){left:calc(var(--address-key)*6);box-shadow:1px 0 #a9bacb}
 .address-head-table thead th:nth-child(7){box-shadow:1px 1px #a9bacb}
+
+/* Interactive worst-Vmin BLK shortcuts below the 256-BLK matrix. */
+.worst-block-list{padding:12px 16px 16px;border-top:1px solid var(--border)}
+.worst-list-heading{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.worst-list-heading h3{font-size:15px;margin:0}
+.worst-list-heading p{margin:0}
+.worst-block-items{display:flex;flex-wrap:wrap;gap:8px}
+.worst-block-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:7px;background:#f8fbfe;color:var(--ink);font-size:13px}
+.worst-block-item:hover,.worst-block-item:focus-visible{border-color:var(--accent);background:#eaf3fd}
+.worst-block-item strong{color:#ae1424}
+.pattern-static-label{font-weight:650;font-size:14px}
