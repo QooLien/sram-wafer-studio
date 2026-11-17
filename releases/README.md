@@ -9,3 +9,5 @@
 下載並解壓縮後，雙擊 `Start SRAM Wafer Studio.cmd`。啟動需求和操作方式請見[專案說明](../README.md)。
 
 [歷史版本](https://github.com/QooLien/sram-wafer-studio/releases)
+
+此版本更新 Scan／March FBC 圖表：電壓標籤垂直顯示，依 Config 順序緊密排列。
