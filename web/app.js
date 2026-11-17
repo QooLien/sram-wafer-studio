@@ -374,7 +374,7 @@ function renderWorstBlockList() {
     const button=el('button',null,'worst-block-item');
     button.append(el('strong',item.pattern),el('span','BLK '+item.blk),el('span',vfmt(item.voltage)));
     button.title='開啟 '+item.pattern+' · BLK '+item.blk+' · '+vfmt(item.voltage);
-    button.onclick=()=>{$('blk-grid').children[item.blk]?.click();};
+    button.onclick=()=>{s.detailPattern=item.pattern;$('blk-grid').children[item.blk]?.click();};
     buttons.append(button);
   }
   target.append(buttons);
