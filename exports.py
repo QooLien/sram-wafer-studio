@@ -463,7 +463,8 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             for col in range(0, last_col + 1, block_width):
                 for wt in range(len(wafer.phases)):
                     ws.write_row(3, col + wt * 2, ("W", "R"), axis)
-            colors = {name: ("#ffe0aa", "#c8d9ef", "#cde8ca", "#f0ccee", "#dddbf5")[i % 5]
+            standard_colors = {"scan": "#ffe0aa", "march": "#c8d9ef"}
+            colors = {name: standard_colors.get(name.casefold(), ("#f0ccee", "#dddbf5", "#f7d5c8")[i % 3])
                       for i, name in enumerate(wafer.config.patterns)}
             clean_blocks = {r["blk"] for r in entries if all(p["status"] == "Pass" for p in r["states"])}
             for row in range(16):
@@ -474,7 +475,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                     trigger = record["trigger"]
                     hard = record["hard"]
                     clean = record["blk"] in clean_blocks
-                    color = "#ff9999" if hard else "#00b0f0" if clean else colors.get(
+                    color = "#ff9999" if hard else "#d1f0d9" if clean else colors.get(
                         trigger["pattern"] if trigger else None, "#edf4fa")
                     label = ""
                     if trigger:
@@ -492,7 +493,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 for col in range(16):
                     record = entries[row + 16 * col]
                     for wt, phase in enumerate(record["states"]):
-                        color = {"Pass": "#00b0f0", "Fail": "#f35b53"}.get(phase["status"], "#e2e8f0")
+                        color = {"Pass": "#258044", "Fail": "#f35b53"}.get(phase["status"], "#e2e8f0")
                         band(ws, start + 1, col * block_width + wt * 2, col * block_width + wt * 2 + 1, "",
                              map_cell_format(color, "#17324d", "", (1, 1, 0, 0)))
                 ws.set_row(start + 2, 15)
@@ -501,7 +502,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                     for wt, phase in enumerate(record["states"]):
                         for offset, side in enumerate(("w", "r")):
                             n = phase[side]
-                            color = "#ff9999" if record["hard"] else "#00b0f0" if record["blk"] in clean_blocks else (
+                            color = "#ff9999" if record["hard"] else "#d1f0d9" if record["blk"] in clean_blocks else (
                                 "#ffd966" if side == "w" and n else "#ffffff")
                             ws.write(start + 2, col * block_width + wt * 2 + offset, n or None,
                                      map_cell_format(color, "#17324d", "", (offset == 0, offset == 1, 0, 1)))

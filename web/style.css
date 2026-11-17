@@ -51,10 +51,10 @@ main{min-width:0}.top{position:sticky;top:0;z-index:10;min-height:52px;backgroun
 .block:hover,.block.selected{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .block .bands{grid-column:1/-1;display:flex;gap:3px}
 .bands i{height:5px;border-radius:1px;flex:1;background:#d5dee7;box-shadow:inset 0 0 0 1px #17283c26}
-.bands i.pass{background:#00b0f0}
+.bands i.pass{background:#258044}
 .bands i.fail{background:#f35b53}
 .block.hard{background:#ffb9b4}
-.block.clean{background:#e5f5fc}
+.block.clean{background:#d1f0d9}
 table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;text-align:left}td,th{padding:8px 10px;border-bottom:1px solid #e2eaf1;font-size:12px}thead th{position:sticky;top:0;background:#e9f0f6;color:#304b62;z-index:2}tbody tr:nth-child(even){background:#f8fbfe}td.wrap{white-space:normal;max-width:300px}td a{font-weight:600}.table-scroll{max-height:530px}.table-scroll td:first-child,.table-scroll th:first-child{padding-left:14px}.pagination{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:12px 14px}.config-wrap{max-height:clamp(260px,calc(100dvh - 200px),850px)}.config td{padding:4px 6px}.config input{min-width:70px;width:100%;padding:5px}.config td:nth-child(3){min-width:164px}.config button{padding:5px 6px}.config .remove{color:#a33030}.config .moves{display:flex}.details-body{padding:0 12px 12px;display:grid;gap:9px}.detail-section{min-width:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}.detail-section h3{font-size:14px;padding:10px 12px}.plot{overflow:auto;padding:6px 11px 12px}
 .plot svg{display:block;width:100%;height:auto}
 .pattern-charts{container-type:inline-size;--figure-ink:#202630;--figure-serif:"STIX Two Text","Cambria","Times New Roman","Microsoft JhengHei",serif}
@@ -82,6 +82,8 @@ table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;te
 .chart-bar{stroke:var(--figure-ink);stroke-width:.65}
 .plot [tabindex]:focus-visible{outline:none;stroke:#202630;stroke-width:2.5}
 @container (min-width:1140px){.chart-pair{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.chart-pair.combined-voltage{grid-template-columns:minmax(0,1fr)}
+.combined-voltage .plot svg{max-height:360px}
 .tab-note{padding:13px;color:var(--muted)}#batch-results{margin-top:15px}.paths{padding:12px 18px;display:grid;gap:6px;overflow-wrap:anywhere}.paths ul{margin:0;padding-left:18px}.paths p{overflow-wrap:anywhere}dialog{padding:0;border:1px solid var(--border);border-radius:12px;color:var(--ink);width:min(820px,calc(100vw - 40px));box-shadow:0 20px 80px #07131f44}dialog::backdrop{background:#0d202c76}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-bottom:1px solid var(--border)}.modal-head h2{font-size:18px}#modal-content{padding:16px;max-height:72vh;overflow:auto}.modal-files{display:grid;gap:8px}.modal-files button{text-align:left}.modal-path{white-space:normal;overflow-wrap:anywhere;padding:8px 0}.modal-table{margin-top:10px}.error-text{color:#a5352c}
 @media(max-width:960px){
   body{grid-template-columns:155px minmax(0,1fr)}

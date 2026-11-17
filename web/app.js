@@ -329,8 +329,11 @@ function selection() {
   const [x,y]=s.selected.split(',');return {x,y};
 }
 const patternColor = name => {
-  const patterns=s.report.patterns; const i=Math.max(0,patterns.indexOf(name));
-  return ['#ffe0aa','#c8d9ef','#cde8ca','#f0ccee','#dddbf5'][i%5];
+  const key=name.toLowerCase();
+  if(key==='scan')return '#ffe0aa';
+  if(key==='march')return '#c8d9ef';
+  const index=Math.max(0,s.report.patterns.indexOf(name));
+  return ['#f0ccee','#dddbf5','#f7d5c8'][index%3];
 };
 function showGridVmin() {
   const cells=$('blk-grid').children;
@@ -365,7 +368,7 @@ async function refreshGrid() {
   const {x,y}=selection();$('dist-title').textContent='256 BLK Distribution · X'+x+' Y'+y;
   $('dist-wts').textContent='Status bands, left to right: '+s.report.wt_numbers.map(wt=>'WT'+wt).join(' / ');
   const board=$('blk-grid');board.replaceChildren();
-  renderLegend('dist-legend',[['#00b0f0','Pass'],['#f35b53','Fail'],['#ffb9b4','Hard Fail'],['#d5dee7','No Data'],...s.report.patterns.map(p=>[patternColor(p),p])]);
+  renderLegend('dist-legend',[['#258044','Pass'],['#f35b53','Fail'],['#ffb9b4','Hard Fail'],['#d5dee7','No Data'],...s.report.patterns.map(p=>[patternColor(p),p])]);
   for(const entry of entries){
     const btn=el('button',null,'block'+(entry.hard?' hard':entry.states.every(v=>v.status==='Pass')?' clean':''));
     const phaseSummary=entry.states.map(phase=>'WT'+phase.wt+' '+phase.status);
@@ -417,7 +420,7 @@ function section(title, node, collapsible=false) {
   } else block.append(caption,sc);
   return block;
 }
-function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318) {
+function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order') {
   const wrap = el('div', null, 'plot');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -442,7 +445,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318) {
   }
   add('line',{x1:left,x2:left,y1:top,y2:bottom,class:'chart-axis'});
   add('line',{x1:left,x2:right,y1:bottom,y2:bottom,class:'chart-axis'});
-  add('text',{x:(left+right)/2,y:height-15,'text-anchor':'middle',class:'chart-label chart-axis-title'},'Test Voltage (V) · Config Order');
+  add('text',{x:(left+right)/2,y:height-15,'text-anchor':'middle',class:'chart-label chart-axis-title'},xLabel);
   return {wrap,add,left,right,bottom,tickY,y};
 }
 function chartMark(chart, tag, attrs, description) {
@@ -489,12 +492,12 @@ function accumulationChart(pattern, stations, result) {
   article.append(chart.wrap);
   return article;
 }
-function countChart(label, unit, peak, width, height) {
+function countChart(label, unit, peak, width, height, xLabel) {
   const ceiling=Math.max(1,peak);
   const step=Math.ceil(ceiling/Math.min(4,ceiling));
   const top=step*Math.ceil(ceiling/step);
   const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
-  return chartFrame(label,unit,top,Array.from({length:top/step+1},(_,i)=>i*step),width,n=>compact.format(n),height);
+  return chartFrame(label,unit,top,Array.from({length:top/step+1},(_,i)=>i*step),width,n=>compact.format(n),height,xLabel);
 }
 function chartLegend(labels, colors) {
   const legend = el('div',null,'legend chart-legend');
@@ -505,40 +508,30 @@ function chartLegend(labels, colors) {
   }
   return legend;
 }
-function voltageDistribution(pattern, stations) {
-  const groups = new Map();
-  for (const row of stations) {
-    if (row.v === null) continue;
-    if (!groups.has(row.v)) groups.set(row.v,[]);
-    groups.get(row.v).push(row);
-  }
-  const recorded = stations.filter(row=>row.v!==null&&row.fbc!==null);
-  if (!recorded.length) return el('p','No stations with both voltage and FBC data.','tab-note');
-  const article = el('div',null,'chart-content');
-  const funcs = [...new Set(recorded.map(row=>row.func))];
-  const palette = ['#204f78','#b86b30','#477958','#8a577b','#657481','#9a8737','#40798b'];
-  const colors = new Map(funcs.map((func,i)=>[func,palette[i%palette.length]]));
-  article.append(chartLegend(funcs,[...colors.values()]));
-  const groupWidth = Math.max(65,...[...groups.values()].map(rows=>rows.length*15+14));
-  const width = Math.max(560,groups.size*groupWidth+108);
-  const peak = Math.max(...recorded.map(row=>row.fbc));
-  const chart = countChart(pattern+' FBC by Test Voltage','FBC',peak,width);
-  const stride = (chart.right-chart.left)/groups.size;
-  for (const [index,[voltage,rows]] of [...groups].entries()) {
-    const mid = chart.left + (index+.5)*stride;
-    const slot = Math.min(20,(stride-12)/rows.length);
-    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(voltage).slice(0,-2));
-    for (const [i,station] of rows.entries()) {
-      if (station.fbc === null) continue;
-      const height = chart.bottom-chart.y(station.fbc);
-      chartMark(chart,'rect',{x:mid+(i-rows.length/2)*slot+1,y:chart.bottom-Math.max(2,height),
-        width:slot-2,height:Math.max(2,height),class:'chart-bar',fill:colors.get(station.func)},stationLabel(station));
+function voltageDistribution(comparison) {
+  const {groups,series,combined,title,incomplete}=comparison;
+  if (!series.length) return el('p','No stations with both voltage and FBC data.','tab-note');
+  const article=el('div',null,'chart-content');
+  article.append(chartLegend(series.map(item=>item.label),series.map(item=>item.color)));
+  const groupWidth=Math.max(65,...groups.map(group=>group.stations.length*15+14));
+  const width=Math.max(560,groups.length*groupWidth+108);
+  const peak=Math.max(...groups.flatMap(group=>group.stations.map(row=>row.fbc)));
+  const chart=countChart(title,'FBC',peak,width,undefined,combined?'Test Voltage (V) · High to Low':undefined);
+  const stride=(chart.right-chart.left)/groups.length;
+  for (const [index,group] of groups.entries()) {
+    const mid=chart.left+(index+.5)*stride;
+    const slot=Math.min(20,(stride-12)/Math.max(1,group.stations.length));
+    chart.add('text',{x:mid,y:chart.tickY,'text-anchor':'middle',class:'chart-label'},vfmt(group.voltage).slice(0,-2));
+    for (const [i,station] of group.stations.entries()) {
+      const height=chart.bottom-chart.y(station.fbc);
+      const item=series[station.series];
+      const description=(combined?item.pattern+' · ':'')+stationLabel(station);
+      chartMark(chart,'rect',{x:mid+(i-group.stations.length/2)*slot+1,y:chart.bottom-Math.max(2,height),
+        width:slot-2,height:Math.max(2,height),class:'chart-bar',fill:item.color},description);
     }
   }
   article.append(chart.wrap);
-  if (recorded.length !== stations.length) {
-    article.append(el('p','Stations with missing voltage or FBC are shown as gaps.','chart-note'));
-  }
+  if (incomplete)article.append(el('p','Only stations with recorded voltage and FBC are plotted.','chart-note'));
   return article;
 }
 function wrMatchDistribution(pattern, groups, labels) {
@@ -627,10 +620,14 @@ function patternCharts(details, initialPattern, showTables) {
       button.classList.toggle('active',s.detailChart===mode);
       button.setAttribute('aria-pressed',s.detailChart===mode);
     }
+    const comparison=details.voltage_comparisons.find(report=>report.patterns.includes(name));
+    const showComparison=s.detailChart==='fbc'&&comparison.combined;
     const voltageChart=s.detailChart==='match'
       ? section('W/R Match by Test Voltage',wrMatchDistribution(name,details.wr_matches.patterns[name],details.wr_matches.labels))
-      : section('FBC by Test Voltage and Function',voltageDistribution(name,stations));
-    charts.replaceChildren(section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name])),voltageChart);
+      : section(comparison.title,voltageDistribution(comparison));
+    const accumulation=section('FBC90% Accumulation',accumulationChart(name,stations,details.fbc90[name]));
+    charts.classList.toggle('combined-voltage',showComparison);
+    charts.replaceChildren(...(showComparison?[voltageChart,accumulation]:[accumulation,voltageChart]));
     if(updateTables)showTables(name,stations);
   };
   selector.onchange = ()=>{s.detailPattern=selector.value;render();};

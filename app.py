@@ -10,7 +10,7 @@ from threading import Lock, Thread
 import json
 import sys
 
-from engine import Config, MATCH_LABELS, MODES, csv_config, identity, load_wafer, match_counts_by_voltage
+from engine import Config, MATCH_LABELS, MODES, csv_config, fbc_voltage_comparison, identity, load_wafer, match_counts_by_voltage
 from workbook_settings import workbook_config
 from workbook_results import read_existing
 from exports import AUDIT_COLUMNS, MAPS, VMIN_COLUMNS, batch_name, compare_order, save_report, test_headers
@@ -170,7 +170,13 @@ def view(wafer, query):
         detail = wafer.detail(wt, chip, blk)
         detail["addresses"] = []
         detail["wr_matches"] = {"labels": MATCH_LABELS, "patterns": {}}
+        detail["voltage_comparisons"] = []
+        covered_patterns = set()
         for name, scope in wafer.config.patterns.items():
+            if name not in covered_patterns:
+                comparison = fbc_voltage_comparison(detail["sweep"], name)
+                detail["voltage_comparisons"].append(comparison)
+                covered_patterns.update(comparison["patterns"])
             matches = list(wafer.pattern_matches(wt, chip, blk, scope))
             detail["addresses"].extend(row | {"pattern": name} for row in matches)
             detail["wr_matches"]["patterns"][name] = match_counts_by_voltage(scope, matches)

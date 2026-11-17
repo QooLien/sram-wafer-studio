@@ -450,6 +450,59 @@ def match_counts_by_voltage(scope, matches):
     return [{"voltage": voltage, "counts": values} for voltage, values in counts.items()]
 
 
+def fbc_voltage_comparison(sweep, selected_pattern):
+    """Align Scan and March stations by displayed voltage without aggregating FBC."""
+    pattern_order = list(dict.fromkeys(row["pattern"] for row in sweep))
+    pair = [name for name in pattern_order if name.casefold() in ("scan", "march")]
+    combined = len(pair) == 2 and selected_pattern in pair
+    patterns = pair if combined else [selected_pattern]
+    palettes = {
+        "scan": ("#164a73", "#356a97", "#5284af", "#6f9bc2", "#37607a"),
+        "march": ("#9c3827", "#ad5726", "#c16c38", "#d7814d", "#8a502c", "#af7654"),
+    }
+    fallback = ("#204f78", "#b86b30", "#477958", "#8a577b", "#657481", "#9a8737", "#40798b")
+    buckets = defaultdict(list)
+    incomplete = False
+    for row in sweep:
+        if row["pattern"] not in patterns:
+            continue
+        if row["v"] is None:
+            incomplete = True
+        else:
+            buckets[float(voltage_text(row["v"]))].append(row)
+    voltages = sorted(buckets, reverse=True) if combined else buckets
+    series, lookup = [], {}
+    color_indexes = defaultdict(int)
+    groups = []
+    for voltage in voltages:
+        repeats = defaultdict(int)
+        marks = []
+        for row in buckets[voltage]:
+            pattern, func = row["pattern"], row["func"]
+            function = pattern, func
+            repeats[function] += 1
+            occurrence = repeats[function]
+            if row["fbc"] is None:
+                incomplete = True
+                continue
+            key = pattern, func, occurrence
+            if key not in lookup:
+                lookup[key] = len(series)
+                palette = palettes.get(pattern.casefold(), fallback)
+                index = color_indexes[pattern]
+                color_indexes[pattern] += 1
+                label = f"{pattern}: {func}" if combined else func
+                if occurrence > 1:
+                    label += f" ({occurrence})"
+                series.append({"label": label, "color": palette[index % len(palette)],
+                               "pattern": pattern, "style": index})
+            marks.append(row | {"series": lookup[key]})
+        groups.append({"voltage": voltage, "stations": marks})
+    title = "Scan & March FBC by Test Voltage and Function" if combined else "FBC by Test Voltage and Function"
+    return {"title": title, "combined": combined, "patterns": patterns, "series": series,
+            "groups": groups, "incomplete": incomplete}
+
+
 def phase_numbers(sources):
     """Resolve labels in STEP order when a filename lacks an explicit WT."""
     labels = tuple(source.source_wt for source in sources)
