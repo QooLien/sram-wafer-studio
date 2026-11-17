@@ -14,4 +14,4 @@
 
 [歷史版本](https://github.com/QooLien/sram-wafer-studio/releases)
 
-此版本新增 Chip Vmin Map 動態色階：各 WT 依有效 Vmin 的最小／最大值呈現綠至紅的相對分布，並顯示動態圖例。
+此版本整合 Scan／March FBC90% 累積圖表，X 軸分段標示 Pattern 及電壓（v），並保留兩組獨立的累積比例。
