@@ -727,6 +727,44 @@ class Wafer:
                 "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
                 "incomplete": aggregate["incomplete"]}
 
+    def merged_fbc90(self, wt, chip, blk):
+        """One 90% crossing over Scan then March in Config order (shared peak)."""
+        names = [name for name in self.config.patterns if name.casefold() in ("scan", "march")]
+        if len(names) != 2:
+            return Crossing(None, None, None, None, "No Data")
+        hard, past, complete = self.eligibility(wt, chip)
+        if hard >> blk & 1:
+            return Crossing(None, None, None, None, "Hard Fail")
+        if past >> blk & 1:
+            return Crossing(None, None, None, None, "Prior WT")
+        phase = self.phases[wt]
+        die = phase.chips.get(chip, ChipData())
+        if not complete or phase.fbc_error or any(die.masks.get(self.config.patterns[name][-1].tno) is None for name in names):
+            return Crossing(None, None, None, None, "No Data")
+        scope = [test for name in names for test in self.config.patterns[name]]
+        values = [die.fbc[test.tno][blk] if test.tno in die.fbc else None for test in scope]
+        return vmin(scope, values, "FBC90%")
+
+    def merged_chip_vmin(self, wt, chip):
+        aggregate = self.chip_vmin(wt, chip)
+        tail = set(aggregate["tail"])
+        hard, past, _ = self.eligibility(wt, chip)
+        candidates = [(blk, result) for blk in range(BLKS)
+                      if blk not in tail and not ((hard | past) >> blk & 1)
+                      for result in [self.merged_fbc90(wt, chip, blk)]
+                      if result.voltage is not None]
+        winner = max(candidates, key=lambda item: (item[1].voltage, -item[0]), default=None)
+        result = {"status": "Vmin" if winner else "No Vmin",
+                  "voltage": winner[1].voltage if winner else None,
+                  "blk": winner[0] if winner else None,
+                  "tno": winner[1].tno if winner else None,
+                  "func": winner[1].func if winner else None,
+                  "pattern": "Merge 90%", "tail": aggregate["tail"],
+                  "hard": aggregate["hard"], "cutoff": aggregate["cutoff"],
+                  "remaining": aggregate["remaining"], "incomplete": aggregate["incomplete"]}
+        result["value"] = result["voltage"]
+        return result
+
     @cached_property
     def all_vmin(self):
         return {(wt, chip): self.chip_vmin(wt, chip)
@@ -741,8 +779,9 @@ class Wafer:
             if kind in ("cat", "repair"):
                 cat = self.cat(wt, chip, kind == "repair")
                 row |= {"value": cat, "status": f"C{cat}" if cat else "No Data"}
-            elif kind in ("vmin", "vmin_pattern"):
-                result = (self.pattern_chip_vmin(wt, chip, pattern) if kind == "vmin_pattern"
+            elif kind in ("vmin", "vmin_pattern", "vmin_merge"):
+                result = (self.merged_chip_vmin(wt, chip) if kind == "vmin_merge"
+                          else self.pattern_chip_vmin(wt, chip, pattern) if kind == "vmin_pattern"
                           else self.all_vmin[wt, chip])
                 row |= result | {"value": result["voltage"]}
             else:
@@ -841,7 +880,9 @@ class Wafer:
                 if values is not None and values[blk] > 0:
                     hard_fail_tests.append({"wt": number, "tno": test.tno, "func": test.name,
                                             "voltage": test.voltage, "fbc": values[blk], "cat": test.cat})
-        return {"sweep": scans, "crossings": diagnostics, "fbc90": fbc90, "hard_fail_tests": hard_fail_tests,
+        merged = self.merged_fbc90(wt, chip, blk) if len([n for n in self.config.patterns if n.casefold() in ("scan", "march")]) == 2 else None
+        return {"sweep": scans, "crossings": diagnostics, "fbc90": fbc90,
+                "merged_fbc90": asdict(merged) if merged else None, "hard_fail_tests": hard_fail_tests,
                 "coverage": [self.audit_one(wt, name, chip, blk) for name in self.config.patterns
                              if isinstance((mask := self.fail_maps[wt, name, chip]), int) and mask >> blk & 1]}
 
