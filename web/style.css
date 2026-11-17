@@ -46,14 +46,35 @@ main{min-width:0}.top{position:sticky;top:0;z-index:10;min-height:52px;backgroun
 }
 .block-number{font:750 13px/1.15 "Segoe UI","Microsoft JhengHei",sans-serif;font-variant-numeric:tabular-nums}
 .block-vmin{font:600 11px/1.15 "Segoe UI","Microsoft JhengHei",sans-serif;color:#304b62;text-align:right;overflow:hidden;text-overflow:ellipsis}
-.block-vmin.worst,#dist-worst{color:#ae1424;font-weight:800}
-@container (max-width:76px){.worst-cell .block-prefix{display:none}}
+.block-vmin.worst{color:#ae1424;font-weight:800}
+.block.has-vmin .block-prefix,.block.tail-cell .block-prefix,.block.judge-cell .block-prefix{display:none}
+.block.tail-cell{border:1px dashed #a74c0b;background:#fff2da}
+.block.tail-cell .block-vmin{color:#853b09;font-weight:750}
+.block.has-vmin{padding-inline:3px;column-gap:2px}
+@container (max-width:76px){
+  .block .block-number{font-size:11px}
+  .block .block-vmin{font-size:10px}
+}
 .block:hover,.block.selected{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .block.judge-cell{border-color:#7c3aed;box-shadow:inset 0 0 0 2px #7c3aed}
 .block.judge-cell.selected{outline:2px solid var(--accent);outline-offset:1px}
-.judge-cell .block-prefix{display:none}
-.block-judge{display:inline-block;margin-right:3px;padding:1px 3px;border-radius:3px;background:#7c3aed;color:#fff;font:800 10px/1 "Segoe UI",sans-serif}
-#dist-judge{color:#6d28d9;font-weight:750}
+.block-badge{display:inline-block;margin-right:2px;padding:1px 2px;border-radius:3px;background:#7c3aed;color:#fff;font:800 10px/1 "Segoe UI",sans-serif}
+.tail-cell .block-badge{background:#a74c0b}
+#dist-judge{color:#4c2880;font-weight:750;font-size:13px;flex-basis:100%}
+#dist-note{flex-basis:100%;color:var(--muted)}
+#dist-wts{font-size:12px;color:var(--muted)}
+.dist-options{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-left:auto;font-size:13px}
+.dist-options label{display:flex;align-items:center;gap:6px}
+.dist-options select{padding:4px 8px}
+#dist-match-legend{flex-basis:100%;padding-top:0}
+.blocks.show-match{grid-template-rows:repeat(16,minmax(57px,1fr));block-size:auto}
+.show-match .block{grid-template-rows:16px minmax(24px,1fr) 5px}
+.block-match{grid-column:1/-1;display:grid;grid-template:repeat(2,1fr)/repeat(2,minmax(0,1fr));border:1px solid #a9bacb;border-radius:3px;background:#fff}
+.match-quadrant{min-height:12px;display:grid;place-items:center;font:700 10px/1.1 "Segoe UI",sans-serif}
+.match-quadrant:nth-child(odd){border-right:1px dashed #c4cfda}
+.match-quadrant:nth-child(-n+2){border-bottom:1px dashed #c4cfda}
+.match-quadrant.filled{background:var(--match-fill)}
+.match-quadrant.match-3{color:#666}
 .block .bands{grid-column:1/-1;display:flex;gap:3px}
 .bands i{height:5px;border-radius:1px;flex:1;background:#d5dee7;box-shadow:inset 0 0 0 1px #17283c26}
 .bands i.pass{background:#258044}
@@ -153,15 +174,21 @@ text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
 .address-table :is(th,td):nth-child(7){left:calc(var(--address-key)*6);box-shadow:1px 0 #a9bacb}
 .address-head-table thead th:nth-child(7){box-shadow:1px 1px #a9bacb}
 
-/* Interactive worst-Vmin BLK shortcuts below the 256-BLK matrix. */
-.worst-block-list{padding:12px 16px 16px;border-top:1px solid var(--border)}
-.worst-list-heading{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.worst-list-heading h3{font-size:15px;margin:0}
-.worst-list-heading p{margin:0}
-.worst-block-items{display:flex;flex-wrap:wrap;gap:8px}
-.worst-block-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:7px;background:#f8fbfe;color:var(--ink);font-size:13px}
-.worst-block-item:hover,.worst-block-item:focus-visible{border-color:var(--accent);background:#eaf3fd}
-.worst-block-item strong{color:#ae1424}
+.distribution #dist-tails{padding:10px 15px 14px;border-top:1px solid var(--border)}
+#dist-tails-label{cursor:pointer;font-weight:700}
+#dist-tail-list{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}
+.correlation-controls{margin-bottom:12px}
+#correlation-export{margin-left:auto}
+#correlation-content{display:grid;gap:12px}
+.correlation-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.correlation-kpis .kpi{padding:10px 12px}
+.correlation-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:10px}
+.correlation-charts .detail-section,#correlation-content>.detail-section{background:#fff}
+.correlation-charts .plot svg{min-width:0!important}
+.correlation-note{padding:6px 12px;color:var(--muted);font-size:12px}
+.tail-list-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #e8ba81;border-radius:5px;background:#fff7e9;font-size:12px}
+.tail-list-item strong{color:#853b09}
+.tail-list-item:hover,.tail-list-item:focus-visible{border-color:#a74c0b}
 .pattern-static-label{font-weight:650;font-size:14px}
 
 /* Three synchronized Scan / March / Merge Vmin wafer maps. */

@@ -1,10 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.16.zip](SRAM%20Analysis%20Tool%20v1.7.16.zip)
+[下載 SRAM Analysis Tool v1.8.0.zip](SRAM%20Analysis%20Tool%20v1.8.0.zip)
 
-v1.7.16 統一 Wafer Map 為 Segoe UI／Microsoft JhengHei 字型，數字採等寬數字排版。Vmin Map 依 Chip 數值所需字寬自動換列，側欄移至下方，並允許 ≥ 與數值分行，修正 ≥ 1.20 等標籤裁切。保留完整數值精度、X/Y、共用色階及 Judge BLK 點選互動，分析規則不變。
+v1.8.0 更新 256 BLK Vmin 分布。依 WT 與 Vmin 範圍顯示各 BLK 的電壓，分別標記 Tail 和 Judge BLK。矩陣可選擇顯示 R/W 四宮格計數。新增獨立的 W/R Monitor Correlation 報表，比較 Scan、March 與 Scan & March，並提供 Excel 匯出。
 
 保留版本：
+
+- [v1.7.16](SRAM%20Analysis%20Tool%20v1.7.16.zip)
 
 - [v1.7.15](SRAM%20Analysis%20Tool%20v1.7.15.zip)
 - [v1.7.14](SRAM%20Analysis%20Tool%20v1.7.14.zip)

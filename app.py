@@ -69,7 +69,7 @@ def run_job(action, data):
             wafer = data["wafer"]
             folder = Path(data["folder"]) if data.get("folder") else wafer.phases[0].source.path.parent
             kind = data.get("kind", "full")
-            if kind not in {"full", "address", "fbc", "cat", "ppt"}:
+            if kind not in {"full", "address", "fbc", "cat", "ppt", "monitor"}:
                 raise ValueError("不支援的匯出格式。")
             if (wafer.source_mode != "full" and kind not in (wafer.source_mode, "cat")
                     or kind == "ppt" and not wafer.full):
@@ -79,6 +79,8 @@ def run_job(action, data):
             chip = tuple(map(int, selected)) if kind == "full" and selected else None
             if chip is not None and chip not in wafer.chips:
                 raise ValueError("選取的 Chip 不在目前的 wafer。")
+            if kind == "monitor":
+                folder = folder / f"Analysis_{date.today():%Y%m%d}"
             output.append(str(save_report(wafer, folder, kind, chip=chip)))
         else:
             full = action == "analyze"
@@ -163,6 +165,20 @@ def view(wafer, query):
             raise ValueError("Chip 座標不存在。")
     if kind == "grid" and chip is not None:
         return wafer.grid(chip)
+    if kind in ("vmin_distribution", "monitor_correlation"):
+        scope = get("scope", "chip")
+        patterns = wafer.config.patterns
+        merge_available = {"scan", "march"} <= {name.casefold() for name in patterns}
+        if not (scope == "chip" or (scope == "merge" and merge_available)
+                or (scope.startswith("pattern:") and scope.removeprefix("pattern:") in patterns)):
+            raise ValueError("Vmin 判定範圍無效。")
+        if kind == "monitor_correlation":
+            if scope not in wafer.monitor_scopes:
+                raise ValueError("請選取 Scan、March 或 Scan & March。")
+            return wafer.monitor_correlation(wt, scope)
+        if chip is None:
+            raise ValueError("請先選取 Chip。")
+        return wafer.vmin_distribution(wt, chip, scope, with_matches=get("matches") == "1")
     if kind == "detail" and chip is not None:
         blk = int(get("blk"))
         if not 0 <= blk < 256:
@@ -228,6 +244,7 @@ class DesktopAPI:
                         "label": wafer.label, "chips": len(wafer.chips), "phases": len(wafer.phases),
                         "wt_numbers": wafer.wt_numbers,
                         "patterns": list(wafer.config.patterns), "mode": wafer.config.mode,
+                        "monitor_scopes": wafer.monitor_scopes,
                         "source_mode": wafer.source_mode, "manifest": wafer.manifest}
                 return result
             if action == "settings":

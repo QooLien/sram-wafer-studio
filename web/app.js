@@ -1,9 +1,9 @@
 
 const $ = id => document.getElementById(id);
-const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',batch:'批次匯出',settings:'TNO 設定'};
+const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',correlation:'W/R 相關性',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0, distributionVersion:0, distribution:null, correlationVersion:0};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const vminfmt = (result,value=result?.voltage) => (result?.relation==='>='&&value!=null?'≥ ':'')+vfmt(value);
@@ -55,8 +55,9 @@ function navigate(page) {
     button.setAttribute('aria-current', selected ? 'page' : 'false');
   });
   $('breadcrumb').textContent = '工作區 / ' + labels[page];
-  if (page === 'maps' && s.report) return refreshMap();
+  if (page === 'maps' && s.report) return Promise.all([refreshMap(),refreshDistribution()]);
   if (page === 'data' && s.report) return refreshTable();
+  if (page === 'correlation') return refreshCorrelation();
   if (page === 'settings') renderSettings();
 }
 document.addEventListener('click', safe(event => {
@@ -92,7 +93,7 @@ function modes() {
 function setBusy(value) {
   s.busy = value;
   for(const id of ['pick-full','pick-batch','run-full','run-batch','open-export','open-xlsm','demo','save-config']) $(id).disabled = value;
-  document.querySelectorAll('[data-pattern-export]').forEach(button=>{button.disabled=value;});
+  document.querySelectorAll('[data-pattern-export],#correlation-export').forEach(button=>{button.disabled=value;});
   renderFiles(); renderFiles(true);
 }
 async function selectAsc(batch) {
@@ -142,6 +143,14 @@ function setReport(report) {
   s.pattern = report.patterns[0] || ''; s.detailPattern = null; s.detailChart = 'fbc';
   s.layer = report.source_mode === 'address' ? 'cat' : 'fail';
   const pats = Object.fromEntries(report.patterns.map(p=>[p,p]));
+  const scopes = {chip:'Chip Vmin',...Object.fromEntries(report.patterns.map(p=>['pattern:'+p,p+' Vmin']))};
+  if(['scan','march'].every(p=>report.patterns.some(name=>name.toLowerCase()===p)))scopes.merge='Merge 90%';
+  options($('dist-scope'),scopes,'chip');
+  $('dist-match-label').hidden=report.source_mode!=='full';
+  options($('correlation-wt'),Object.fromEntries(report.wt_numbers.map(wt=>[wt,'WT'+wt])),s.wt);
+  options($('correlation-scope'),report.monitor_scopes,report.monitor_scopes.merge?'merge':Object.keys(report.monitor_scopes)[0]);
+  put('correlation-content');
+  s.distribution=null;
   options($('pattern'),pats,s.pattern);
   options($('data-pattern'),{'':'所有 Pattern',...pats},'');
   options($('data-wt'),Object.fromEntries(report.wt_numbers.map(wt=>[wt,'WT'+wt])),s.wt);
@@ -299,7 +308,11 @@ async function refreshMap() {
   put('wt-list',...s.report.wt_numbers.map(wt=>{
     const button=el('button','WT'+wt,s.wt===wt?'active':'');
     button.setAttribute('aria-pressed',s.wt===wt);
-    button.onclick=safe(async()=>{s.wt=wt;$('data-wt').value=wt;await refreshMap();if(s.block!==null) await refreshDetail();});
+    button.onclick=safe(async()=>{
+      s.wt=wt;$('data-wt').value=wt;
+      await Promise.all([refreshMap(),refreshDistribution()]);
+      if(s.block!==null)await refreshDetail();
+    });
     return button;
   }));
   setMapStage(s.mapStage);
@@ -358,6 +371,8 @@ async function refreshMap() {
         put('block-detail');setMapStage('wafer');
         board.querySelectorAll('.chip').forEach(btn=>{btn.dataset.active=String(btn.dataset.chip===s.selected);});
         selectMapJudge(row,source);showChip(row);
+        $('dist-scope').value=source==='Chip Vmin'?'chip':source==='Merge 90%'?'merge':'pattern:'+source;
+        s.distribution=null;
         if(s.report.source_mode==='address')return;
         await refreshGrid();
         if(s.page==='maps'&&s.selected===selected&&s.blocks.length){
@@ -400,7 +415,6 @@ async function refreshMap() {
     const selectedRow=rows.find(row=>chipKey(row)===s.selected);
     selectMapJudge(selectedRow,'Chip Vmin');showChip(selectedRow);
   }
-  showGridVmin();
   fitMapStage();
 }
 $('layer').onchange=safe(()=>{s.layer=$('layer').value;return refreshMap();});
@@ -416,83 +430,120 @@ const patternColor = name => {
   const index=Math.max(0,s.report.patterns.indexOf(name));
   return ['#f0ccee','#dddbf5','#f7d5c8'][index%3];
 };
-function renderWorstBlockList() {
-  const target=$('worst-block-list');
-  if(!target)return;
-  target.replaceChildren();
-  const names=s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase()));
-  const items=names.flatMap(pattern=>s.blocks.flatMap(entry=>entry.worst_vmin
-    .filter(hit=>hit.wt===s.wt&&hit.pattern===pattern)
-    .map(hit=>({pattern,blk:entry.blk,voltage:hit.voltage,relation:hit.relation}))));
-  const heading=el('div',null,'worst-list-heading');
-  heading.append(el('h3','WT'+s.wt+' · Worst Scan / March Vmin'),
-    el('p','點選 BLK 可直接開啟明細；同一 Pattern 若有相同最差 Vmin，會列出所有並列 BLK。','tab-note'));
-  target.append(heading);
-  if(!items.length){target.append(el('p','此 WT 沒有可用的 Scan／March Vmin 資料。','tab-note'));return;}
-  const buttons=el('div',null,'worst-block-items');
-  for(const item of items){
-    const button=el('button',null,'worst-block-item');
-    button.append(el('strong',item.pattern),el('span','BLK '+item.blk),el('span',vminfmt(item)));
-    button.title='開啟 '+item.pattern+' · BLK '+item.blk+' · '+vminfmt(item);
-    button.onclick=()=>{s.detailPattern=item.pattern;$('blk-grid').children[item.blk]?.click();};
-    buttons.append(button);
-  }
-  target.append(buttons);
+function renderTailList(tails) {
+  const details=$('dist-tails');
+  details.hidden=!tails.length;
+  $('dist-tails-label').textContent='Tail BLKs ('+tails.length+')';
+  const sorted=[...tails].sort((a,b)=>(b.voltage??-Infinity)-(a.voltage??-Infinity)||b.peak_fbc-a.peak_fbc||a.blk-b.blk);
+  const buttons=sorted.map(entry=>{
+    const button=el('button',null,'tail-list-item');
+    button.append(el('strong','BLK '+entry.blk),
+      el('span',entry.voltage==null?entry.status:vminfmt(entry)),
+      el('span','Peak FBC '+nfmt.format(entry.peak_fbc)));
+    button.onclick=()=>$('blk-grid').children[entry.blk]?.click();
+    return button;
+  });
+  put('dist-tail-list',...buttons);
 }
-function showGridVmin() {
-  const cells=$('blk-grid').children;
-  const worstPatterns=new Map();
-  const context=s.vminJudge;
-  const judge=s.layer==='vmin'&&context?.wt===s.wt&&context.chip===s.selected
-    &&context.row.value!=null&&Number.isInteger(context.row.blk)?context.row:null;
-  const judgeSummary=$('dist-judge');
-  judgeSummary.hidden=!judge;
-  judgeSummary.textContent=judge
-    ? 'WT'+s.wt+' · '+context.source+' · Judge BLK '+judge.blk+' · '+vminfmt(judge,judge.value)+' · TNO '+judge.tno : '';
-  for(const [index,entry] of s.blocks.entries()) {
-    const tile=cells[index];
+
+async function refreshDistribution() {
+  if(!s.selected||!s.blocks.length)return;
+  const id=++s.distributionVersion;
+  const wt=s.wt, chip=s.selected, scope=$('dist-scope').value;
+  const matches=s.report.source_mode==='full'&&$('dist-match').checked;
+  const data=await api(params({view:'vmin_distribution',scope,matches:matches?'1':'0',...selection()}));
+  if(id!==s.distributionVersion||wt!==s.wt||chip!==s.selected||scope!==$('dist-scope').value||s.page!=='maps')return;
+  const {summary,mode,entries}=data;
+  s.distribution=entries;
+  const source=$('dist-scope').selectedOptions[0].textContent;
+  const judge=summary.blk==null ? summary.status :
+    'Judge BLK '+summary.blk+' · '+vminfmt(summary)+' · TNO '+summary.tno;
+  $('dist-judge').textContent=['WT'+wt,source,mode,judge,'Tail BLKs: '+summary.tail.length,
+    ...(summary.cutoff==null?[]:['Peak FBC cutoff: '+nfmt.format(summary.cutoff)])].join(' · ');
+  const note=$('dist-note');
+  note.textContent=summary.reason??'';
+  note.hidden=!summary.reason;
+  const board=$('blk-grid');
+  board.classList.toggle('show-match',matches);
+  $('dist-match-legend').hidden=!matches;
+  const cells=board.children;
+  for(const entry of entries){
+    const tile=cells[entry.blk];
     const label=tile.querySelector('.block-vmin');
-    const isJudge=judge?.blk===entry.blk;
-    tile.classList.toggle('judge-cell',isJudge);
-    tile.querySelector('.block-judge').hidden=!isJudge;
-    const normal=entry.trigger ? s.report.mode==='FBC90%'&&entry.trigger.relation!=='>=' ? entry.trigger.func : entry.trigger.voltage==null?entry.trigger.status:vminfmt(entry.trigger) : '';
-    const worst=entry.worst_vmin.filter(hit=>hit.wt===s.wt);
-    for(const hit of worst)worstPatterns.set(hit.pattern,hit);
-    tile.classList.toggle('worst-cell',worst.length>0);
-    label.classList.toggle('worst',worst.length>0);
-    const worstVoltages=[...new Set(worst.map(hit=>vminfmt(hit).replace(/ V$/, 'v')))];
-    label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
-    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vminfmt(judge,judge.value)+' · TNO '+judge.tno:'',normal,entry.trigger?.status==='No Vmin'?crossingReason(entry.trigger):'',...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
-      ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vminfmt(hit))].filter(Boolean).join(' · ');
+    const voltage=entry.voltage!=null?vminfmt(entry):'';
+    const hard=entry.status==='Hard Fail';
+    const pass=entry.status==='Pass';
+    tile.classList.toggle('hard',hard);
+    tile.classList.toggle('clean',pass);
+    tile.classList.toggle('tail-cell',entry.tail);
+    tile.classList.toggle('judge-cell',entry.judge);
+    tile.classList.toggle('has-vmin',Boolean(voltage));
+    tile.style.background=entry.pattern&&voltage&&!entry.tail?patternColor(entry.pattern):'';
+    const badge=tile.querySelector('.block-badge');
+    badge.hidden=!entry.tail&&!entry.judge;
+    badge.textContent=entry.judge?'J':entry.tail?'T':'';
+    label.classList.toggle('worst',entry.judge);
+    label.textContent=voltage.replace(/ V$/, '');
+    const quadrants=tile.querySelector('.block-match');
+    quadrants.hidden=!matches;
+    if(matches){
+      [...quadrants.children].forEach((cell,index)=>{
+        const count=entry.matches[index];
+        cell.textContent=count?nfmt.format(count):'';
+        cell.title=matchLabels[index]+': '+nfmt.format(count);
+        cell.classList.toggle('filled',count>0);
+      });
+    }
+    const title=['BLK '+entry.blk,'WT'+wt,entry.pattern,voltage?'Vmin '+voltage:entry.status,
+      entry.judge?'Judge BLK':entry.tail?'Tail BLK · excluded from Chip Vmin':'',
+      entry.tno==null?'':'TNO '+entry.tno+' · '+entry.func,
+      entry.peak_fbc?'Peak FBC '+nfmt.format(entry.peak_fbc):'',
+      ...(matches?entry.matches.map((count,index)=>matchLabels[index]+': '+nfmt.format(count)):[]),
+      ...s.blocks[entry.blk].states.map(phase=>'WT'+phase.wt+' '+phase.status)].filter(Boolean).join(' · ');
     tile.title=title;
     tile.setAttribute('aria-label',title);
   }
-  const summary=$('dist-worst');
-  summary.hidden=!worstPatterns.size;
-  const summaryText=s.report.patterns.filter(pattern=>worstPatterns.has(pattern))
-    .map(pattern=>pattern+' '+vminfmt(worstPatterns.get(pattern))).join(' · ');
-  summary.textContent='WT'+s.wt+' · Worst Vmin · '+summaryText;
+  renderTailList(entries.filter(entry=>entry.tail));
+  fitMapStage();
 }
+$('dist-scope').onchange=safe(()=>{
+  s.distribution=null;
+  return refreshDistribution();
+});
+$('dist-match').onchange=safe(refreshDistribution);
+
 async function refreshGrid() {
   const id=++s.gridVersion;
   ++s.detailVersion;
   const entries=await api(params({view:'grid',...selection()}));
   if(id!==s.gridVersion || s.page!=='maps')return;
   s.blocks=entries;
-  const {x,y}=selection();$('dist-title').textContent='256 BLK Distribution · X'+x+' Y'+y;
+  const {x,y}=selection();$('dist-title').textContent='256 BLK Vmin Distribution · X'+x+' Y'+y;
   $('dist-wts').textContent='Status bands, left to right: '+s.report.wt_numbers.map(wt=>'WT'+wt).join(' / ');
   const board=$('blk-grid');board.replaceChildren();
-  renderLegend('dist-legend',[['#258044','Pass'],['#f35b53','Fail'],['#ffb9b4','Hard Fail'],['#d5dee7','No Data'],...s.report.patterns.map(p=>[patternColor(p),p])]);
+  renderLegend('dist-legend',[['#7c3aed','J · Judge BLK'],['#ffcf83','T · Tail BLK (excluded)'],['#258044','Pass'],
+    ['#f35b53','Fail band'],['#ffb9b4','Hard Fail'],['#d5dee7','No Data / Other Status'],...s.report.patterns.map(p=>[patternColor(p),p])]);
+  renderLegend('dist-match-legend',matchLabels.map((label,i)=>[matchFills[i],['Top left','Top right','Bottom left','Bottom right'][i]+': '+label]));
   for(const entry of entries){
-    const btn=el('button',null,'block'+(entry.hard?' hard':entry.states.every(v=>v.status==='Pass')?' clean':''));
+    const btn=el('button',null,'block');
     const phaseSummary=entry.states.map(phase=>'WT'+phase.wt+' '+phase.status);
     btn.style.gridRow=entry.blk%16+1;btn.style.gridColumn=Math.floor(entry.blk/16)+1;
-    if(entry.trigger&&!entry.hard)btn.style.background=patternColor(entry.trigger.pattern);
     const number=el('span',null,'block-number');
-    const judgeBadge=el('span','J','block-judge');
-    judgeBadge.hidden=true;judgeBadge.setAttribute('aria-hidden','true');
-    number.append(judgeBadge,el('span','BLK ','block-prefix'),String(entry.blk));
+    const badge=el('span',null,'block-badge');
+    badge.hidden=true;
+    badge.setAttribute('aria-hidden','true');
+    number.append(badge,el('span','BLK ','block-prefix'),String(entry.blk));
+    btn.setAttribute('aria-label','BLK '+entry.blk);
     btn.append(number,el('small',null,'block-vmin'));
+    const quadrants=el('span',null,'block-match');
+    quadrants.hidden=true;
+    quadrants.setAttribute('aria-hidden','true');
+    for(const [index,color] of matchFills.entries()){
+      const cell=el('span',null,'match-quadrant match-'+index);
+      cell.style.setProperty('--match-fill',color);
+      quadrants.append(cell);
+    }
+    btn.append(quadrants);
     const bars=el('span',null,'bands');
     bars.setAttribute('aria-hidden','true');
     for(const [index,phase] of entry.states.entries()){
@@ -503,6 +554,8 @@ async function refreshGrid() {
     btn.onclick=safe(async()=>{
       const selected=s.selected;
       s.block=entry.blk;
+      const scope=$('dist-scope').value;
+      s.detailPattern=s.distribution?.[entry.blk].pattern??(scope.startsWith('pattern:')?scope.slice(8):s.pattern);
       board.querySelector('.block.selected')?.classList.remove('selected');
       btn.classList.add('selected');
       put('block-detail');setMapStage('matrix');
@@ -514,8 +567,7 @@ async function refreshGrid() {
     });
     board.append(btn);
   }
-  showGridVmin();
-  renderWorstBlockList();
+  await refreshDistribution();
 }
 function table(headers, rows) {
   const table=el('table'), head=el('thead'), body=el('tbody'), bar=el('tr');
@@ -691,6 +743,67 @@ function accumulationChart(pattern, stations, result, segments=[]) {
   article.append(chartLegend(['Running maximum (%) · left axis','Raw FBC · right axis'],['#204f78','#c2762b']),chart.wrap);
   return article;
 }
+const matchLabels=['Read only','Write only','Write & Read','No monitor hit'];
+const matchFills=['#ffffff','#ffd966','#ff6600','#ffffff'];
+
+function monitorScatter(rows, side, label) {
+  const points=rows.filter(row=>row.complete&&row[side]!=null);
+  if(!points.length)return el('p','No chips with both Function FBC and '+label+' data.','correlation-note');
+  const maxX=Math.max(1,...points.map(row=>row[side]));
+  const maxY=Math.max(1,...points.map(row=>row.function));
+  const ticks=max=>[...new Set(Array.from({length:6},(_,i)=>Math.round(max*i/5)))];
+  const chart=chartFrame(label+' vs Function Fail Addresses','Function Fail Addresses',maxY,ticks(maxY),560,
+    value=>nfmt.format(value),320,label+' Fail Addresses');
+  const x=value=>chart.left+(chart.right-chart.left)*value/maxX;
+  for(const value of ticks(maxX)){
+    chart.add('line',{x1:x(value),x2:x(value),y1:chart.bottom,y2:chart.bottom+5,class:'chart-axis'});
+    chart.add('text',{x:x(value),y:chart.bottom+20,'text-anchor':'middle',class:'chart-label'},nfmt.format(value));
+  }
+  for(const row of points){
+    const title='X'+row.x+' Y'+row.y+' · '+label+' '+row[side]+' · Function '+row.function;
+    chartMark(chart,'circle',{cx:x(row[side]),cy:chart.y(row.function),r:4,fill:side==='write'?'#ad600b':'#2465a5','fill-opacity':0.8},title);
+  }
+  return chart.wrap;
+}
+
+async function refreshCorrelation() {
+  const version=++s.correlationVersion;
+  const available=s.report?.source_mode==='full'&&Object.keys(s.report.monitor_scopes).length>0;
+  $('correlation-empty').hidden=available;
+  $('correlation-report').hidden=!available;
+  if(!available)return;
+  const wt=$('correlation-wt').value, scope=$('correlation-scope').value;
+  const data=await api(params({view:'monitor_correlation',wt,scope}));
+  if(version!==s.correlationVersion||s.page!=='correlation')return;
+  const total=data.counts.reduce((sum,count)=>sum+count,0);
+  const matched=total-data.counts[3];
+  const pct=total?((matched/total)*100).toFixed(1)+'%':'—';
+  const overview=el('div',null,'correlation-kpis');
+  for(const [label,value] of [['Function Fail Addresses',nfmt.format(total)],['Any W/R Match',pct],
+    ...data.labels.map((label,index)=>[label,nfmt.format(data.counts[index])])]){
+    const card=el('div',null,'card kpi');
+    card.append(el('span',label),el('b',value));
+    overview.append(card);
+  }
+  const charts=el('div',null,'correlation-charts pattern-charts');
+  for(const [side,label] of [['write','W-Low'],['read','R-Low']]){
+    const info=data.relationships[side];
+    const panel=section(label+' vs Function',monitorScatter(data.rows,side,label));
+    panel.append(el('p','Pearson r: '+(info.r==null?'—':info.r.toFixed(3))+' · Chips: '+nfmt.format(info.chips),'correlation-note'));
+    charts.append(panel);
+  }
+  const note=el('p','Counts use captured Fail Addresses in eligible BLKs, deduplicated by WT / Chip / BLK / WL / BL / IO. Pearson r uses chips with complete Function FBC and observed monitor data.','correlation-note');
+  const details=section('Chip Breakdown',table(['X','Y','Function FBC','Fail BLKs','BLKs with Address','Function Addresses',...data.labels,'W-Low Addresses','R-Low Addresses'],
+    data.rows.map(row=>[row.x,row.y,row.complete?'Complete':'Incomplete',row.fail_blks??'—',row.address_blks,row.function,...row.counts,row.write??'—',row.read??'—'])));
+  put('correlation-content',overview,charts,note,details);
+}
+$('correlation-wt').onchange=safe(refreshCorrelation);
+$('correlation-scope').onchange=safe(refreshCorrelation);
+$('correlation-export').onclick=safe(async()=>{
+  const data=await api('pick',{kind:'folder'});
+  if(data.paths.length)await run('export',{kind:'monitor',folder:data.paths[0]});
+});
+
 function combinedAccumulation(details) {
   const names=Object.keys(details.fbc90).filter(name=>['scan','march'].includes(name.toLowerCase()));
   if(names.length!==2)return null;

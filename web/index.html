@@ -17,6 +17,7 @@
     <button class="nav selected" data-page="import"><span>⇥</span>匯入 ASC</button>
     <button class="nav" data-page="maps"><span>▦</span>Wafer Maps</button>
     <button class="nav" data-page="data"><span>▤</span>資料核對</button>
+    <button class="nav" data-page="correlation"><span>⋮</span>W/R 相關性</button>
     <button class="nav" data-page="batch"><span>⇉</span>批次匯出</button>
     <button class="nav" data-page="settings"><span>⚙</span>TNO 設定</button>
   </nav>
@@ -58,11 +59,37 @@
       </aside>
     </div>
     <section class="card distribution" id="distribution" hidden>
-      <div class="section-title"><div><h2 id="dist-title">256 BLK Distribution</h2><p id="dist-wts"></p><p id="dist-worst" hidden></p><p id="dist-judge" hidden role="status"></p></div><div id="dist-legend" class="legend"></div></div>
+      <div class="section-title">
+        <h2 id="dist-title">256 BLK Vmin Distribution</h2>
+        <div class="dist-options">
+          <label>Vmin scope <select id="dist-scope"></select></label>
+          <label id="dist-match-label"><input id="dist-match" type="checkbox"> Show R/W Match Count</label>
+        </div>
+        <p id="dist-judge" role="status"></p>
+        <div id="dist-legend" class="legend"></div>
+        <p id="dist-wts"></p>
+        <p id="dist-note" hidden></p>
+        <div id="dist-match-legend" class="legend" hidden></div>
+      </div>
       <div class="blk-scroll" tabindex="0" role="region" aria-label="Scrollable 256-block matrix"><div id="blk-grid" class="blocks"></div></div>
-      <div id="worst-block-list" class="worst-block-list" aria-label="Worst Scan and March Vmin BLK list"></div>
+      <details id="dist-tails" hidden>
+        <summary id="dist-tails-label">Tail BLKs</summary>
+        <div id="dist-tail-list"></div>
+      </details>
     </section>
     <section class="card distribution" id="block-detail" hidden></section>
+  </div>
+</section>
+<section class="page" id="page-correlation" hidden>
+  <div class="heading"><h1>W/R Monitor Correlation</h1></div>
+  <p class="empty card" id="correlation-empty">請先匯入完整 ASC 資料，並設定 Scan 或 March Pattern。</p>
+  <div id="correlation-report" hidden>
+    <div class="card toolbar correlation-controls">
+      <label>WT <select id="correlation-wt"></select></label>
+      <label>Pattern <select id="correlation-scope"></select></label>
+      <button class="secondary" id="correlation-export">Export Excel</button>
+    </div>
+    <div id="correlation-content" aria-live="polite"></div>
   </div>
 </section>
 <section class="page" id="page-data" hidden>

@@ -11,6 +11,7 @@ from math import isfinite
 from pathlib import Path
 import csv
 import re
+from statistics import StatisticsError, correlation
 from typing import Callable
 
 BLKS = 256
@@ -687,6 +688,9 @@ class Wafer:
             prior |= endpoint or 0
 
     def chip_vmin(self, wt, chip):
+        return self._chip_vmin_data(wt, chip)[0]
+
+    def _chip_vmin_data(self, wt, chip):
         hard, past, _ = self.eligibility(wt, chip)
         peaks, unknown, best = [0] * BLKS, set(), {}
         for name, b, crossing, peak, complete in self.crossings(wt, chip):
@@ -712,10 +716,139 @@ class Wafer:
                   else "No Vmin" if any(b in best for b in kept) else "Below" if any(peaks[b] for b in kept)
                   else "Pass")
         pattern, result = best[winner] if winner is not None else (None, None)
-        return {"status": status, "voltage": result.voltage if result else None, "blk": winner,
-                "tno": result.tno if result else None, "func": result.func if result else None,
-                "relation": result.relation if result else "", "pattern": pattern, "cutoff": cutoff, "tail": tail, "hard": list(bits(hard)),
-                "prior": past.bit_count(), "remaining": len(kept), "incomplete": incomplete}
+        summary = {"status": status, "voltage": result.voltage if result else None, "blk": winner,
+                   "tno": result.tno if result else None, "func": result.func if result else None,
+                   "relation": result.relation if result else "", "pattern": pattern, "cutoff": cutoff,
+                   "tail": tail, "hard": list(bits(hard)), "prior": past.bit_count(),
+                   "remaining": len(kept), "incomplete": incomplete}
+        return summary, best, peaks, unknown, past
+
+    @cached_property
+    def monitor_tnos(self):
+        return {side: {tno for tno, group in self.config.monitor_sides.items() if group == side}
+                for side in ("W", "R")}
+
+    @property
+    def monitor_scopes(self):
+        names = {name.casefold(): name for name in self.config.patterns}
+        scopes = {f"pattern:{names[key]}": label for key, label in (("scan", "Scan"), ("march", "March"))
+                  if key in names}
+        if len(scopes) == 2:
+            scopes["merge"] = "Scan & March"
+        return scopes
+
+    def monitor_patterns(self, scope):
+        if scope == "chip":
+            return tuple(self.config.patterns)
+        if scope == "merge":
+            return tuple(name for name in self.config.patterns if name.casefold() in ("scan", "march"))
+        return (scope.removeprefix("pattern:"),)
+
+    def block_monitor_matches(self, wt, chip, patterns):
+        """Count distinct captured Function addresses in eligible BLKs, by monitor category."""
+        die = self.die(wt, chip)
+        if die is None:
+            return {}, None, None, None
+        function_tnos = defaultdict(set)
+        complete = True
+        for name in patterns:
+            mask = self.fail_maps[wt, name, chip]
+            if not isinstance(mask, int):
+                complete = False
+                continue
+            tnos = {test.tno for test in self.config.patterns[name]}
+            complete &= tnos.issubset(die.fbc)
+            for blk in bits(mask):
+                function_tnos[blk].update(tnos)
+
+        write_tnos, read_tnos = (self.monitor_tnos[side] for side in ("W", "R"))
+        write_count = read_count = 0
+        counts_by_block = {}
+        for blk, addresses in die.addresses.items():
+            function = function_tnos.get(blk, ())
+            counts = [0] * len(MATCH_LABELS)
+            for hits in addresses.values():
+                write = not hits.isdisjoint(write_tnos)
+                read = not hits.isdisjoint(read_tnos)
+                write_count += write
+                read_count += read
+                if not hits.isdisjoint(function):
+                    counts[GROUPS.index(observed_category(write, read))] += 1
+            if any(counts):
+                counts_by_block[blk] = counts
+
+        def observed(tnos, count):
+            return count if count or not tnos.isdisjoint(die.fbc) else None
+
+        return (counts_by_block, len(function_tnos) if complete else None,
+                observed(write_tnos, write_count), observed(read_tnos, read_count))
+
+    def monitor_correlation(self, wt, scope):
+        if self.source_mode != "full":
+            raise ValueError("請匯入完整 FBC 與 Fail Address 資料。")
+        patterns = self.monitor_patterns(scope)
+        rows = []
+        for chip in self.chips:
+            counts_by_block, fail_blks, write, read = self.block_monitor_matches(wt, chip, patterns)
+            counts = [sum(block[i] for block in counts_by_block.values()) for i in range(len(MATCH_LABELS))]
+            total = sum(counts)
+            rows.append({"x": chip[0], "y": chip[1], "write": write, "read": read,
+                         "fail_blks": fail_blks, "address_blks": len(counts_by_block),
+                         "function": total, "counts": counts, "complete": fail_blks is not None})
+        totals = [sum(row["counts"][i] for row in rows) for i in range(len(MATCH_LABELS))]
+        relationships = {}
+        for side in ("write", "read"):
+            points = [(row[side], row["function"]) for row in rows if row["complete"] and row[side] is not None]
+            try:
+                coefficient = correlation(*zip(*points)) if len(points) >= 2 else None
+            except StatisticsError:
+                coefficient = None
+            relationships[side] = {"r": coefficient, "chips": len(points)}
+        return {"wt": self.wt_numbers[wt], "patterns": patterns, "labels": MATCH_LABELS,
+                "rows": rows, "counts": totals, "relationships": relationships}
+
+    def vmin_distribution(self, wt, chip, scope="chip", *, with_matches=False):
+        """Expose BLK readings before Tail exclusion beside the actual map Judge."""
+        aggregate, best, peaks, unknown, past = self._chip_vmin_data(wt, chip)
+        excluded_tails = set(aggregate["tail"])
+        hard = set(aggregate["hard"])
+        mode = self.config.mode
+        if scope == "chip":
+            summary = aggregate
+            readings = best
+        elif scope == "merge":
+            mode = "FBC90%"
+            summary = self.merged_chip_vmin(wt, chip)
+            merge_scope = {test.tno: name for name, tests in self.config.patterns.items()
+                           if name.casefold() in ("scan", "march") for test in tests}
+            readings = {}
+            for blk in range(BLKS):
+                crossing = self.merged_fbc90(wt, chip, blk)
+                readings[blk] = merge_scope.get(crossing.tno), crossing
+        else:
+            mode = "FBC90%"
+            pattern = scope.removeprefix("pattern:")
+            summary = self.pattern_chip_vmin(wt, chip, pattern)
+            readings = {blk: (name, crossing)
+                        for name, blk, crossing, _, _ in self.crossings(wt, chip, mode=mode)
+                        if name == pattern}
+        entries = []
+        for blk in range(BLKS):
+            reading = readings.get(blk)
+            if reading is None:
+                status = ("Hard Fail" if blk in hard else "Prior WT" if past >> blk & 1
+                          else "No Data" if blk in unknown else "Below" if peaks[blk] else "Pass")
+                reading = None, Crossing(None, None, None, None, status)
+            pattern, crossing = reading
+            entries.append(asdict(crossing) | {
+                "blk": blk, "pattern": pattern, "peak_fbc": peaks[blk],
+                "tail": blk in excluded_tails, "judge": blk == summary["blk"],
+            })
+        if with_matches and self.source_mode == "full":
+            matches, _, _, _ = self.block_monitor_matches(wt, chip, self.monitor_patterns(scope))
+            for entry in entries:
+                entry["matches"] = matches.get(entry["blk"], [0] * len(MATCH_LABELS))
+        return {"summary": summary, "mode": mode, "entries": entries}
 
     def pattern_fbc_summary(self, wt, chip, pattern):
         """Classify a Chip from all raw 256-BLK FBC vectors, never captured addresses."""

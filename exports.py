@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
 
-from engine import MODES, voltage_text
+from engine import MATCH_LABELS, MODES, voltage_text
 
 
 MAPS = {"fail": "Fail BLK", "wr": "W&R", "loss": "Fail BLK / Loss", "cat": "Cat Wafer Map",
@@ -582,6 +582,57 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                                         for r in wafer.manifest))
 
 
+def write_monitor_report(wafer, path):
+    import xlsxwriter
+
+    with xlsxwriter.Workbook(path, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
+        head = book.add_format({"bold": True, "font_color": "#ffffff", "bg_color": "#17324d",
+                                "text_wrap": True, "valign": "vcenter", "align": "center"})
+        body = book.add_format({"font_name": "Calibri", "font_size": 11, "align": "center"})
+        ratio = book.add_format({"num_format": "0.0%", "align": "center"})
+
+        def report_sheet(name, columns):
+            sheet = book.add_worksheet(name)
+            sheet.hide_gridlines(2)
+            sheet.set_row(0, 32)
+            sheet.set_column(0, len(columns) - 1, 17, body)
+            sheet.freeze_panes(1, 2)
+            sheet.write_row(0, 0, columns, head)
+            sheet.repeat_rows(0)
+            return sheet
+
+        totals = report_sheet("W-R Correlation", ["WT", "Scope", "Function Addresses", *MATCH_LABELS,
+                              "Any Match", "Write Pearson r", "Write Chips", "Read Pearson r", "Read Chips"])
+        detail = report_sheet("Chip Breakdown", ["WT", "Scope", "X", "Y", "Function FBC Coverage",
+                              "Fail BLKs", "BLKs with addresses", "Function Addresses", *MATCH_LABELS,
+                              "W-Low Captured", "R-Low Captured"])
+        total_row = detail_row = 1
+        for wt in range(len(wafer.phases)):
+            for scope, label in wafer.monitor_scopes.items():
+                report = wafer.monitor_correlation(wt, scope)
+                number = "WT" + str(report["wt"])
+                counts = report["counts"]
+                found = sum(counts)
+                write = report["relationships"]["write"]
+                read = report["relationships"]["read"]
+                totals.write_row(total_row, 0, (number, label, found, *counts))
+                if found:
+                    totals.write_number(total_row, 7, sum(counts[:3]) / found, ratio)
+                totals.write_row(total_row, 8, (write["r"], write["chips"], read["r"], read["chips"]))
+                total_row += 1
+                for row in report["rows"]:
+                    detail.write_row(detail_row, 0, (number, label, row["x"], row["y"],
+                                     "Complete" if row["complete"] else "Incomplete", row["fail_blks"],
+                                     row["address_blks"], row["function"], *row["counts"],
+                                     row["write"], row["read"]))
+                    detail_row += 1
+        totals.autofilter(0, 0, total_row - 1, 11)
+        detail.autofilter(0, 0, detail_row - 1, 13)
+        totals.merge_range(total_row + 1, 0, total_row + 1, 11,
+                           "Match counts use captured, distinct addresses in eligible Fail BLKs. "
+                           "Pearson r uses Chips with complete Function FBC and observed monitor data.")
+
+
 def save_report(wafer, folder, kind, stem=None, *, chip=None):
     folder.mkdir(parents=True, exist_ok=True)
     extension = "pptx" if kind == "ppt" else "xlsx"
@@ -592,6 +643,8 @@ def save_report(wafer, folder, kind, stem=None, *, chip=None):
     try:
         if kind == "ppt":
             write_ppt(wafer, part)
+        elif kind == "monitor":
+            write_monitor_report(wafer, part)
         else:
             write_excel(wafer, part, kind, chip=chip)
         part.rename(path)

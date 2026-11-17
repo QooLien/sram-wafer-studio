@@ -19,6 +19,11 @@
 5. **批次匯出** 可選不同 Lot／Wafer。依完整 LOT 和 WNO 分組；檔名使用前六碼 LOT、Wafer、檔名 WT 標記、ASC 版本及匯出日期。每片只輸出 Cat Wafer Map、Fail Address、Fail BLK 到來源資料夾下的 Address_日期。
 6. **TNO 設定** 內的完整版和批次版各自儲存，初始值來自已發佈的 v13.1 與 v1.6。可匯入含 Config 工作表的 Excel 或 CSV，並調整列順序。
 
+### 256 BLK 與 W/R 相關性
+
+- 在 256 BLK 選擇 WT 和 Vmin scope。矩陣顯示各 BLK 的 Vmin。紫框 J 為該範圍的 Judge BLK，橘框 T 為 Tail。Tail 列表提供 BLK、Vmin 和 Peak FBC，點選可開啟明細。用 **Show R/W Match Count** 在矩陣顯示左上 Read only、右上 Write only、左下 Write & Read、右下 No monitor hit 的筆數。
+- **W/R Monitor Correlation** 按 WT 選擇 Scan、March 或 Scan & March。匹配取符合既有 Fail Map 判定的 BLK，收集 Pattern 內 Function TNO 的 Fail Address，使用相同 WT、Chip 和完整 Address 匹配任一設定電壓的 W-Low／R-Low Monitor。合併範圍去重。Pearson r 以具備完整 Function FBC 與所選 Monitor 觀測的 Chip 計算，使用可取得的 Fail Address 筆數。支援匯出所有已匯入 WT 的彙總與逐 Chip 資料。
+
 ## 判定
 
 - Scan Vmin 僅分析 Scan 有 Fail BLK 的 Chip；March Vmin 僅分析 Scan 全 Pass、March 有 Fail BLK 的 Chip。依各 Pattern 全部 Config TNO 的 256 BLK FBC 分類，不使用 Fail Address 數量。任一 FBC > 0 為 Fail；資料完整且全為 0 才算 Pass。Scan Fail 的 Chip 在 March 圖顯示 Not Applicable，無法確認 Scan Pass 時顯示 No Data。最差 Scan／March BLK 列表同步篩選；原始單 BLK 曲線、整體 Chip Vmin 與 Merge 判定保留。
