@@ -243,7 +243,7 @@ function tint(row) {
       12:'#dbaddb',13:'#dbaddb',14:'#ffd966',15:'#d9d2e9',16:'#d9d2e9',17:'#d9d2e9',18:'#ffe699',19:'#9bc2e6',20:'#bfbfbf'};
     return [[val ?? '—',colors[val] || (val>=5&&val<=8?'#f8cbad':'#eef3f7')]];
   }
-  if(s.layer === 'vmin') return [[val === null ? row.status : vminfmt(row,val).replace(/ V$/, ''),val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : (s.vminScale?.color(val) ?? '#f3d86b')]];
+  if(s.layer === 'vmin') return [[val === null ? (row.status==='Not Applicable'?'N/A':row.status) : vminfmt(row,val).replace(/ V$/, ''),val === null ? (row.status==='Pass'?'#dbeafe':'#e2e8f0') : (s.vminScale?.color(val) ?? '#f3d86b')]];
   if(row.gray) return [['','#808080']];
   if(row.blue) return [['','#00b0f0']];
   if(s.layer === 'wr') return row.wr.map((v,i)=>[v||'',v?['#fff','#ffd966','#ff6600','#fff'][i]:'#fff',i === 3?'#8c8c8c':'']);
@@ -274,6 +274,7 @@ function showChip(row) {
     fields.push(['Fail BLK',row.value ?? '—'],['Loss BLK',row.loss],
                 ['Read / Write',row.wr[0]+' / '+row.wr[1]],['RW / No Monitor',row.wr[2]+' / '+row.wr[3]]);
   }
+  if(row.reason)fields.push(['判定說明',row.reason]);
   const details=el('dl');
   for(const [k,v] of fields){const line=el('div');line.append(el('dt',k),el('dd',v));details.append(line);}
   const link=el('button','查看 Chip 資料','secondary');
@@ -330,7 +331,7 @@ async function refreshMap() {
     for(let y=y0;y<=y1;y++)axis(y,1,y-y0+2);
     for(const row of data){
       const values=s.layer==='vmin'
-        ? [[row.value===null?row.status:vminfmt(row,row.value).replace(/ V$/, ''),
+        ? [[row.value===null?(row.status==='Not Applicable'?'N/A':row.status):vminfmt(row,row.value).replace(/ V$/, ''),
             row.value===null?(row.status==='Pass'?'#dbeafe':'#e2e8f0'):(scale?.color(row.value)??'#f3d86b')]]
         : tint(row);
       const chip=el('button',null,'chip'+(values.length===4?' quad':values.length===2?' half':''));
@@ -367,7 +368,7 @@ async function refreshMap() {
       [commonScale.color(commonScale.min),'Low '+vfmt(commonScale.min)],
       [commonScale.color(commonScale.median),'Median '+vfmt(commonScale.median)],
       [commonScale.color(commonScale.max),'High '+vfmt(commonScale.max)],
-      ['#dbeafe','Pass'],['#e2e8f0','No Data / status']
+      ['#dbeafe','Pass'],['#e2e8f0','No Data / status · N/A: Scan Fail']
     ]:[['#f3d86b','No valid Vmin']]);
     for(const [i,pattern] of [...dualPatterns,'Merge 90%'].entries()){
       const panel=el('section',null,'wafer-vmin-panel');

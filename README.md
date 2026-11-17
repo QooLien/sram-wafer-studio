@@ -21,6 +21,8 @@
 
 ## 判定
 
+- Scan Vmin 僅分析 Scan 有 Fail BLK 的 Chip；March Vmin 僅分析 Scan 全 Pass、March 有 Fail BLK 的 Chip。依各 Pattern 全部 Config TNO 的 256 BLK FBC 分類，不使用 Fail Address 數量。任一 FBC > 0 為 Fail；資料完整且全為 0 才算 Pass。Scan Fail 的 Chip 在 March 圖顯示 Not Applicable，無法確認 Scan Pass 時顯示 No Data。最差 Scan／March BLK 列表同步篩選；原始單 BLK 曲線、整體 Chip Vmin 與 Merge 判定保留。
+
 - 若最高設定測試電壓已達所選模式的 Fail 門檻，Vmin 顯示為「≥ Hard Fail 電壓」下限；例如首個 1.035 V TNO 判 Fail、Hard Fail 設為 1.20 V 時輸出 ≥ 1.20 V。Hard Fail 電壓取 Config Hard Fail 區間的最高設定值，原始測試電壓及觸發 TNO 保留。缺少必要電壓時不推定下限。
 
 - Fail BLK 取 Pattern 終點正值 FBC。Hard Fail、前序 WT Function fail 及同 WT 前序 Pattern 終點 fail 的 BLK 會排除。

@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.13.zip](SRAM%20Analysis%20Tool%20v1.7.13.zip)
+[下載 SRAM Analysis Tool v1.7.14.zip](SRAM%20Analysis%20Tool%20v1.7.14.zip)
 
-v1.7.13 當最高設定測試電壓達到所選模式的 Fail 門檻時，Vmin 輸出「≥ Config Hard Fail 電壓」。例如 Hard Fail 為 1.20 V、首個測試 1.035 V 判定 Fail，輸出 ≥ 1.20 V，並保留原始測試電壓與 TNO。地圖、matrix、BLK 明細及報表同步顯示下限符號；Hard Fail／Prior WT／Tail 排除及各模式門檻保留。未設定 Hard Fail 電壓或測試電壓不完整時，不推定此下限。
+v1.7.14 以全部 Config TNO 的 256 BLK FBC 篩選 Chip：Scan Vmin 僅分析 Scan Fail；March Vmin 僅分析 Scan Pass／March Fail。資料完整且全為 0 才視為 Pass，Scan Fail 的 Chip 在 March 圖顯示 Not Applicable，缺資料顯示 No Data。最差 BLK 標示與列表同步篩選，保留原始 BLK 曲線、整體與 Merge 判定及既有排除規則。
 
 保留版本：
 
+- [v1.7.13](SRAM%20Analysis%20Tool%20v1.7.13.zip)
 - [v1.7.12](SRAM%20Analysis%20Tool%20v1.7.12.zip)
 - [v1.7.11](SRAM%20Analysis%20Tool%20v1.7.11.zip)
 - [v1.7.10](SRAM%20Analysis%20Tool%20v1.7.10.zip)

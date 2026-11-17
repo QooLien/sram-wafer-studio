@@ -717,15 +717,60 @@ class Wafer:
                 "relation": result.relation if result else "", "pattern": pattern, "cutoff": cutoff, "tail": tail, "hard": list(bits(hard)),
                 "prior": past.bit_count(), "remaining": len(kept), "incomplete": incomplete}
 
+    def pattern_fbc_summary(self, wt, chip, pattern):
+        """Classify a Chip from all raw 256-BLK FBC vectors, never captured addresses."""
+        scope = self.config.patterns.get(pattern)
+        die = self.die(wt, chip)
+        if not scope or die is None or self.phases[wt].fbc_error:
+            return {"status": "No Data", "fail_blks": 0, "complete": False}
+        vectors = [die.fbc.get(test.tno) for test in scope]
+        complete = all(vector is not None and len(vector) == BLKS for vector in vectors)
+        fail = 0
+        for vector in vectors:
+            if vector is not None and len(vector) == BLKS:
+                fail |= sum(1 << blk for blk, count in enumerate(vector) if count > 0)
+        return {"status": "Fail" if fail else "Pass" if complete else "No Data",
+                "fail_blks": fail.bit_count(), "complete": complete}
+
+    def pattern_vmin_eligibility(self, wt, chip, pattern):
+        """Scan-fail Chips and Scan-pass/March-fail Chips form separate Vmin cohorts."""
+        key = pattern.casefold()
+        if key not in ("scan", "march"):
+            return "", ""
+        scan = next((name for name in self.config.patterns if name.casefold() == "scan"), None)
+        if key == "march":
+            scan_state = self.pattern_fbc_summary(wt, chip, scan)
+            if scan_state["status"] == "Fail":
+                return "Not Applicable", "Scan has Fail BLKs; March Vmin requires Scan Pass."
+            if scan_state["status"] != "Pass":
+                return "No Data", "Complete Scan FBC is required to confirm Scan Pass."
+        current = self.pattern_fbc_summary(wt, chip, pattern)
+        if current["status"] == "Pass":
+            return "Pass", pattern + " FBC is complete and all 256 BLKs pass at every Config TNO."
+        if not current["complete"]:
+            return "No Data", pattern + " FBC is missing or invalid; Vmin is unavailable."
+        return "", ""
+
     def pattern_chip_vmin(self, wt, chip, pattern):
         """Per-pattern worst eligible BLK Vmin, using the existing chip Tail filter."""
         aggregate = self.chip_vmin(wt, chip)
         tail = set(aggregate["tail"])
-        candidates = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip, mode="FBC90%")
-                      if name == pattern and blk not in tail and crossing.voltage is not None]
+        gate_status, reason = self.pattern_vmin_eligibility(wt, chip, pattern)
+        if gate_status:
+            return {"status": gate_status, "reason": reason, "voltage": None, "value": None,
+                    "blk": None, "tno": None, "func": None, "relation": "", "pattern": pattern,
+                    "tail": aggregate["tail"], "hard": aggregate["hard"], "cutoff": aggregate["cutoff"],
+                    "remaining": aggregate["remaining"], "incomplete": aggregate["incomplete"]}
+        rows = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip, mode="FBC90%")
+                if name == pattern and blk not in tail]
+        candidates = [(blk, crossing) for blk, crossing in rows if crossing.voltage is not None]
         winner = max(candidates, key=lambda item: (item[1].voltage, item[1].relation == ">=", -item[0]), default=None)
         if winner is None:
-            return {"status": "No Vmin", "voltage": None, "value": None, "blk": None,
+            eligible = [crossing for _, crossing in rows
+                        if crossing.status not in ("Hard Fail", "Prior WT", "Prior Pattern")]
+            status = "No BLK" if not eligible else "No Data" if any(c.status == "No Data" for c in eligible) else "No Vmin"
+            return {"status": status, "reason": "No eligible BLK with a valid Vmin after exclusions.",
+                    "voltage": None, "value": None, "blk": None,
                     "tno": None, "func": None, "relation": "", "pattern": pattern,
                     "tail": aggregate["tail"], "hard": aggregate["hard"],
                     "cutoff": aggregate["cutoff"], "remaining": aggregate["remaining"],
@@ -816,8 +861,9 @@ class Wafer:
         hard = set(bits(self.eligibility(len(self.phases) - 1, chip)[0]))
         for wt, number in enumerate(self.wt_numbers):
             incomplete = set()
+            allowed = {pattern: not self.pattern_vmin_eligibility(wt, chip, pattern)[0] for pattern in tracked}
             for pattern, blk, crossing, peak, _ in self.crossings(wt, chip):
-                if pattern in tracked and crossing.voltage is not None:
+                if pattern in tracked and allowed[pattern] and crossing.voltage is not None:
                     key = number, pattern
                     previous = worst.get(key)
                     if previous is None or (crossing.voltage, crossing.relation == ">=") > (previous[0], previous[1] == ">="):
