@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.7.14.zip](SRAM%20Analysis%20Tool%20v1.7.14.zip)
+[下載 SRAM Analysis Tool v1.7.15.zip](SRAM%20Analysis%20Tool%20v1.7.15.zip)
 
-v1.7.14 以全部 Config TNO 的 256 BLK FBC 篩選 Chip：Scan Vmin 僅分析 Scan Fail；March Vmin 僅分析 Scan Pass／March Fail。資料完整且全為 0 才視為 Pass，Scan Fail 的 Chip 在 March 圖顯示 Not Applicable，缺資料顯示 No Data。最差 BLK 標示與列表同步篩選，保留原始 BLK 曲線、整體與 Merge 判定及既有排除規則。
+v1.7.15 將 Scan／March／Merge 累積圖與 FBC 柱圖改為緊湊的等寬連續電壓區間，保留各 TNO、Config 順序與原始 FBC。每區間加上垂直格線，密集刻度自動直排／分列，圖寬隨視窗配置，不再因站數增加而產生超寬畫布。Vmin 與 FBC90% 判定不變。
 
 保留版本：
 
+- [v1.7.14](SRAM%20Analysis%20Tool%20v1.7.14.zip)
 - [v1.7.13](SRAM%20Analysis%20Tool%20v1.7.13.zip)
 - [v1.7.12](SRAM%20Analysis%20Tool%20v1.7.12.zip)
 - [v1.7.11](SRAM%20Analysis%20Tool%20v1.7.11.zip)

@@ -540,9 +540,9 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - rightMargin, bottom = height - (footer?.margin??(xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74)), top = 43, tickY = footer?bottom+26:height-48;
+  const left = 80, right = width - rightMargin, bottom = height - (footer?.margin??(xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74)), top = footer?.top??43, tickY = footer?bottom+26:height-48;
   const y = value => bottom - value / maximum * (bottom-top);
-  add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
+  add('text', {x:left,y:footer?.unitY??24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
     add('line', {x1:left,x2:right,y1:y(value),y2:y(value),class:'chart-grid'});
     add('text', {x:left-12,y:y(value)+5,'text-anchor':'end',class:'chart-label'}, tickLabel(value));
@@ -550,7 +550,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
   add('line',{x1:left,x2:left,y1:top,y2:bottom,class:'chart-axis'});
   add('line',{x1:left,x2:right,y1:bottom,y2:bottom,class:'chart-axis'});
   add('text',{x:(left+right)/2,y:height-15,'text-anchor':'middle',class:'chart-label chart-axis-title'},xLabel);
-  return {wrap,add,left,right,bottom,tickY,y};
+  return {wrap,add,left,right,bottom,tickY,y,maximum};
 }
 function chartMark(chart, tag, attrs, description) {
   const mark = chart.add(tag,{...attrs,tabindex:0,'aria-label':description});
@@ -576,6 +576,46 @@ function stationLabel(station) {
   const fbc = station.fbc === null ? 'No FBC data' : 'FBC '+nfmt.format(station.fbc);
   return station.func+' · TNO '+station.tno+' · '+vfmt(station.v)+' · '+fbc;
 }
+// Equal-width consecutive voltage intervals; keep every TNO in Config order inside its interval.
+function voltageLayout(stations, grouped=false, rightMargin=100) {
+  const runs=[];
+  for(const [i,station] of stations.entries()){
+    const last=runs.at(-1);
+    if(last?.voltage===station.v&&last?.pattern===station.pattern)last.end=i;
+    else runs.push({voltage:station.v,pattern:station.pattern,start:i,end:i});
+  }
+  const width=Math.max(360,rightMargin+180,Math.min(1100,window.innerWidth-(window.innerWidth>700?240:56)));
+  const labels=runs.map(run=>run.voltage==null?'Not set':vfmt(run.voltage));
+  const slot=(width-80-rightMargin)/Math.max(1,runs.length);
+  const rotated=labels.some(label=>label.length*8+12>slot);
+  const lanes=rotated?Math.max(1,Math.ceil(22/slot)):1;
+  const labelRow=rotated?Math.max(80,...labels.map(label=>label.length*8+12)):24;
+  const labelArea=labelRow*lanes;
+  return {runs,labels,width,rotated,lanes,labelRow,labelArea,
+    margin:labelArea+(grouped?78:48),positions:[],strides:[]};
+}
+function drawVoltageIntervals(chart, layout, grouped=false) {
+  const {runs,labels,rotated,lanes,labelRow,labelArea}=layout;
+  const slot=(chart.right-chart.left)/Math.max(1,runs.length);
+  chart.wrap.classList.add('voltage-fit');
+  chart.wrap.querySelector('svg').style.minWidth='0';
+  const labelY=chart.bottom+(rotated?12:24);
+  for(const [i,run] of runs.entries()){
+    const left=chart.left+i*slot, mid=left+slot/2;
+    for(let station=run.start;station<=run.end;station++){
+      const stride=slot/(run.end-run.start+1);
+      layout.positions[station]=left+(station-run.start+.5)*stride;
+      layout.strides[station]=stride;
+    }
+    chart.add('line',{x1:left,x2:left,y1:chart.y(chart.maximum),y2:chart.bottom,class:'chart-voltage-grid'});
+    const y=labelY+(rotated?(i%lanes)*labelRow:0);
+    chart.add('text',{x:mid,y,'text-anchor':rotated?'end':'middle',
+      ...(rotated?{transform:'rotate(-90 '+mid+' '+y+')'}:{}),class:'chart-label chart-voltage-label'},labels[i]);
+  }
+  chart.add('line',{x1:chart.right,x2:chart.right,y1:chart.y(chart.maximum),y2:chart.bottom,class:'chart-voltage-grid'});
+  layout.patternY=chart.bottom+labelArea+38;
+  return index=>layout.positions[index];
+}
 function accumulationChart(pattern, stations, result, segments=[]) {
   const article = el('div',null,'chart-content');
   if (['Hard Fail','Prior WT','Prior Pattern','No Data'].includes(result.status)) {
@@ -587,49 +627,28 @@ function accumulationChart(pattern, stations, result, segments=[]) {
   const info = result.tno === null ? 'All Pass · Peak FBC 0' :
     'First crossing ≥90% · Vmin '+vminfmt(result)+' · '+result.func+' · TNO '+result.tno+(result.relation==='>='?' · Test '+vfmt(result.test_voltage):'');
   article.append(el('p',info,'chart-summary'));
-  const runs = [];
-  for (const [i,station] of stations.entries()) {
-    const last = runs.at(-1);
-    if (last?.voltage === station.v && last?.pattern === station.pattern) last.end = i;
-    else runs.push({voltage:station.v,pattern:station.pattern,start:i,end:i});
-  }
-  // Unequal runs can put Scan ticks close together even when the total chart is wide.
-  // Size from adjacent run centres and label lengths, preserving uniform Config-station spacing.
-  let stride=15;
-  const labels=runs.map(run=>run.voltage===null?'Not set':vfmt(run.voltage));
-  const labelWidths=labels.map(label=>Math.max(66,label.length*10+16));
-  for(const [i,run] of runs.entries()){
-    if(i===0)stride=Math.max(stride,labelWidths[i]/(run.end-run.start+1));
-    if(i===runs.length-1)stride=Math.max(stride,labelWidths[i]/(run.end-run.start+1));
-    if(i>0){
-      const previous=runs[i-1];
-      const gap=(run.start+run.end-previous.start-previous.end)/2;
-      stride=Math.max(stride,((labelWidths[i-1]+labelWidths[i])/2+12)/gap);
-    }
-  }
-  const rightMargin=Math.max(100,nfmt.format(result.peak).length*10+24);
-  const width=Math.max(560,Math.ceil(stations.length*stride)+80+rightMargin);
   const grouped=segments.length>0;
+  const rightMargin=Math.max(100,nfmt.format(result.peak).length*10+24);
+  const layout=voltageLayout(stations,grouped,rightMargin);
+  // Reserve right-axis space without allowing station count to expand the canvas.
+  const width=layout.width;
   const chart=chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],
-    width,n=>n+'%',grouped?354:318,'Test Voltage (V) · Config Order',grouped?{margin:110}:null,rightMargin);
-  const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
-  for (const [i,run] of runs.entries()) {
-    chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label chart-voltage-label'},labels[i]);
-  }
-  // Keep the established axes and curve style; label merged pattern boundaries separately.
+    width,n=>n+'%',244+layout.margin,'Test Voltage (V) · Config Order',{margin:layout.margin,...(width<600?{top:64,unitY:20}:{})},rightMargin);
+  const x=drawVoltageIntervals(chart,layout,grouped);
   let offset=0;
-  for (const segment of segments) {
-    const start=offset;
-    offset+=segment.stations.length;
-    chart.add('text',{x:x((start+offset-1)/2),y:chart.tickY+28,
+  for(const segment of segments){
+    const start=offset;offset+=segment.stations.length;
+    const first=layout.positions[start]-layout.strides[start]/2;
+    const last=layout.positions[offset-1]+layout.strides[offset-1]/2;
+    chart.add('text',{x:(first+last)/2,y:layout.patternY,
       'text-anchor':'middle',class:'chart-label chart-pattern-label'},segment.name);
-    if(start>0)chart.add('line',{x1:x(start-.5),x2:x(start-.5),y1:chart.y(100),y2:chart.bottom,
+    if(start>0)chart.add('line',{x1:first,x2:first,y1:chart.y(100),y2:chart.bottom,
       class:'chart-pattern-divider'});
   }
   if (result.peak > 0) chart.add('line',{x1:chart.left,x2:chart.right,y1:chart.y(90),y2:chart.y(90),class:'chart-threshold'});
   // The right axis uses the same Peak as the percentage curve, while the raw series may fall.
   chart.add('line',{x1:chart.right,x2:chart.right,y1:chart.y(100),y2:chart.bottom,class:'chart-axis chart-fbc-axis'});
-  chart.add('text',{x:width-12,y:24,'text-anchor':'end',class:'chart-label chart-axis-title chart-fbc-axis'},'Fail bit count (FBC)');
+  chart.add('text',{x:width-12,y:width<600?44:24,'text-anchor':'end',class:'chart-label chart-axis-title chart-fbc-axis'},'Fail bit count (FBC)');
   const fbcTicks=[...new Set([0,.25,.5,.75,1].map(fraction=>Math.round(result.peak*fraction)))];
   for(const count of fbcTicks){
     const y=chart.y(result.peak?count/result.peak*100:0);
@@ -697,25 +716,34 @@ function voltageDistribution(comparison) {
   if (!series.length || !groups.length) return el('p','No stations with both voltage and FBC data.','tab-note');
   const article=el('div',null,'chart-content');
   article.append(chartLegend(series.map(item=>item.label),series.map(item=>item.color)));
-  // One compact slot per Config station: never merge repeated voltages or separate patterns.
-  const slotWidth=34;
-  const width=Math.max(560,groups.length*slotWidth+116);
+  const layout=voltageLayout(groups.map(group=>({v:group.voltage,pattern:group.stations[0]?.pattern})),combined);
   const peak=Math.max(...groups.flatMap(group=>group.stations.map(row=>row.fbc)));
-  const chart=countChart(title,'FBC',peak,width,370,'Voltage (V)');
-  const stride=(chart.right-chart.left)/groups.length;
+  const ceiling=Math.max(1,peak), step=Math.ceil(ceiling/Math.min(4,ceiling));
+  const top=step*Math.ceil(ceiling/step);
+  const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
+  const chart=chartFrame(title,'FBC',top,Array.from({length:top/step+1},(_,i)=>i*step),layout.width,
+    n=>compact.format(n),244+layout.margin,'Test Voltage (V) · Config Order',{margin:layout.margin},100);
+  const x=drawVoltageIntervals(chart,layout,combined);
+  if(combined){
+    for(const pattern of comparison.patterns){
+      const indices=groups.map((group,i)=>group.stations[0]?.pattern===pattern?i:-1).filter(i=>i>=0);
+      if(indices.length){
+        const first=indices[0],last=indices.at(-1);
+        chart.add('text',{x:(x(first)-layout.strides[first]/2+x(last)+layout.strides[last]/2)/2,
+          y:layout.patternY,'text-anchor':'middle',class:'chart-label chart-pattern-label'},pattern);
+      }
+    }
+  }
   for (const [index,group] of groups.entries()) {
-    const mid=chart.left+(index+.5)*stride;
-    const label=vfmt(group.voltage).replace(/ V$/, 'v');
-    chart.add('text',{x:mid,y:chart.bottom+76,transform:'rotate(-90 '+mid+' '+(chart.bottom+76)+')',
-      'text-anchor':'start',class:'chart-label'},label);
-    const barWidth=Math.max(4,Math.min(25,stride-5));
+    const mid=x(index);
+    const barWidth=Math.max(.5,Math.min(25,layout.strides[index]*.75));
     for (const [i,station] of group.stations.entries()) {
       const height=chart.bottom-chart.y(station.fbc);
       const item=series[station.series];
       const description=(combined?item.pattern+' · ':'')+stationLabel(station);
       const part=barWidth/group.stations.length;
-      chartMark(chart,'rect',{x:mid-barWidth/2+i*part+1,y:chart.bottom-Math.max(2,height),
-        width:Math.max(2,part-2),height:Math.max(2,height),class:'chart-bar',fill:item.color},description);
+      chartMark(chart,'rect',{x:mid-barWidth/2+i*part+part*.05,y:chart.bottom-Math.max(2,height),
+        width:Math.max(.4,part*.9),height:Math.max(2,height),class:'chart-bar',fill:item.color},description);
     }
   }
   article.append(chart.wrap);
