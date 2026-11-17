@@ -440,14 +440,14 @@ function showGridVmin() {
     const isJudge=judge?.blk===entry.blk;
     tile.classList.toggle('judge-cell',isJudge);
     tile.querySelector('.block-judge').hidden=!isJudge;
-    const normal=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : vfmt(entry.trigger.voltage) : '';
+    const normal=entry.trigger ? s.report.mode==='FBC90%' ? entry.trigger.func : entry.trigger.voltage==null?entry.trigger.status:vfmt(entry.trigger.voltage) : '';
     const worst=entry.worst_vmin.filter(hit=>hit.wt===s.wt);
     for(const hit of worst)worstPatterns.set(hit.pattern,hit.voltage);
     tile.classList.toggle('worst-cell',worst.length>0);
     label.classList.toggle('worst',worst.length>0);
     const worstVoltages=[...new Set(worst.map(hit=>vfmt(hit.voltage).replace(/ V$/, 'v')))];
     label.textContent=worstVoltages.length>1?'S/M':(worstVoltages[0]??normal);
-    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vfmt(judge.value)+' · TNO '+judge.tno:'',normal,...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
+    const title=['BLK '+entry.blk,isJudge?context.source+' Judge BLK · '+vfmt(judge.value)+' · TNO '+judge.tno:'',normal,entry.trigger?.status==='No Vmin'?crossingReason(entry.trigger):'',...entry.states.map(phase=>'WT'+phase.wt+' '+phase.status),
       ...worst.map(hit=>'WT'+hit.wt+' worst '+hit.pattern+' Vmin '+vfmt(hit.voltage))].filter(Boolean).join(' · ');
     tile.title=title;
     tile.setAttribute('aria-label',title);
@@ -522,7 +522,7 @@ function section(title, node, collapsible=false) {
   } else block.append(caption,sc);
   return block;
 }
-function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order') {
+function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order', footer=null) {
   const wrap = el('div', null, 'plot');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -538,7 +538,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - 35, bottom = height - (xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74), top = 43, tickY = height - 48;
+  const left = 80, right = width - 35, bottom = height - (footer?.margin??(xLabel.includes('Scan / March') ? 128 : xLabel === 'Voltage (V)' ? 112 : 74)), top = 43, tickY = footer?bottom+26:height-48;
   const y = value => bottom - value / maximum * (bottom-top);
   add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
@@ -554,6 +554,20 @@ function chartMark(chart, tag, attrs, description) {
   const mark = chart.add(tag,{...attrs,tabindex:0,'aria-label':description});
   chart.add('title',{},description,mark);
   return mark;
+}
+function crossingReason(result) {
+  const reasons={
+    'Hard Fail':'此 BLK 已被 Hard Fail 排除。',
+    'Prior WT':'此 BLK 已在前序 WT Fail，故排除。',
+    'Prior Pattern':'此 BLK 已在同 WT 的前序 Pattern Fail，故排除。',
+    'No Data':'必要的 FBC／前序測試資料缺失或格式錯誤。',
+    'Pass':'完整 FBC 皆為 0，未觸發 Vmin。',
+    'Below':'尚未達到所選 FBC 門檻。'
+  };
+  if(result.status==='No Vmin')return s.report.mode==='FBC0'
+    ? 'FBC0 找不到首筆 Fail 之前的電壓組：首個電壓組已 Fail，或前站未設定電壓。'
+    : '達門檻的 TNO 未設定測試電壓。';
+  return reasons[result.status]??('依 '+s.report.mode+' 門檻判定。');
 }
 function stationLabel(station) {
   const fbc = station.fbc === null ? 'No FBC data' : 'FBC '+nfmt.format(station.fbc);
@@ -576,19 +590,34 @@ function accumulationChart(pattern, stations, result, segments=[]) {
     if (last?.voltage === station.v && last?.pattern === station.pattern) last.end = i;
     else runs.push({voltage:station.v,pattern:station.pattern,start:i,end:i});
   }
-  const width = Math.max(560,runs.length*66+108,stations.length*15+108);
-  const chart = chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],width,n=>n+'%');
+  // Unequal runs can put Scan ticks close together even when the total chart is wide.
+  // Size from adjacent run centres and label lengths, preserving uniform Config-station spacing.
+  let stride=15;
+  const labels=runs.map(run=>run.voltage===null?'Not set':vfmt(run.voltage));
+  const labelWidths=labels.map(label=>Math.max(66,label.length*10+16));
+  for(const [i,run] of runs.entries()){
+    if(i===0)stride=Math.max(stride,labelWidths[i]/(run.end-run.start+1));
+    if(i===runs.length-1)stride=Math.max(stride,labelWidths[i]/(run.end-run.start+1));
+    if(i>0){
+      const previous=runs[i-1];
+      const gap=(run.start+run.end-previous.start-previous.end)/2;
+      stride=Math.max(stride,((labelWidths[i-1]+labelWidths[i])/2+12)/gap);
+    }
+  }
+  const width=Math.max(560,Math.ceil(stations.length*stride)+115);
+  const grouped=segments.length>0;
+  const chart=chartFrame(pattern+' FBC90% Accumulation','Cumulative FBC (%)',100,[0,25,50,75,90,100],
+    width,n=>n+'%',grouped?354:318,'Test Voltage (V) · Config Order',grouped?{margin:110}:null);
   const x = index => chart.left + (index+.5)*(chart.right-chart.left)/stations.length;
-  for (const run of runs) {
-    chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label'},
-      run.voltage === null ? '—' : vfmt(run.voltage));
+  for (const [i,run] of runs.entries()) {
+    chart.add('text',{x:x((run.start+run.end)/2),y:chart.tickY,'text-anchor':'middle',class:'chart-label chart-voltage-label'},labels[i]);
   }
   // Keep the established axes and curve style; label merged pattern boundaries separately.
   let offset=0;
   for (const segment of segments) {
     const start=offset;
     offset+=segment.stations.length;
-    chart.add('text',{x:x((start+offset-1)/2),y:chart.tickY+16,
+    chart.add('text',{x:x((start+offset-1)/2),y:chart.tickY+28,
       'text-anchor':'middle',class:'chart-label chart-pattern-label'},segment.name);
     if(start>0)chart.add('line',{x1:x(start-.5),x2:x(start-.5),y1:chart.y(100),y2:chart.bottom,
       class:'chart-pattern-divider'});
@@ -831,8 +860,8 @@ async function refreshDetail(fromMatrix=false) {
   const block=s.blocks[s.block];
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
-  body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC'],
-    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,vfmt(c.voltage),c.peak])),true));
+  body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC','判定說明'],
+    details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,c.voltage==null?c.status:vfmt(c.voltage),c.peak,crossingReason(c)])),true));
   body.append(sweep,address);
   put('block-detail',title,body);setMapStage(s.mapStage);
   return march?sweep:null;
