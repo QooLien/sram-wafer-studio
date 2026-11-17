@@ -436,7 +436,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
     parent.append(node);
     return node;
   };
-  const left = 80, right = width - 35, bottom = height - 74, top = 43, tickY = height - 48;
+  const left = 80, right = width - 35, bottom = height - (xLabel === 'Voltage (V)' ? 112 : 74), top = 43, tickY = height - 48;
   const y = value => bottom - value / maximum * (bottom-top);
   add('text', {x:left,y:24,class:'chart-label chart-axis-title'}, unit);
   for (const value of ticks) {
