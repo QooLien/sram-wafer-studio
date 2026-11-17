@@ -711,7 +711,7 @@ class Wafer:
         """Per-pattern worst eligible BLK Vmin, using the existing chip Tail filter."""
         aggregate = self.chip_vmin(wt, chip)
         tail = set(aggregate["tail"])
-        candidates = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip)
+        candidates = [(blk, crossing) for name, blk, crossing, _, _ in self.crossings(wt, chip, mode="FBC90%")
                       if name == pattern and blk not in tail and crossing.voltage is not None]
         winner = max(candidates, key=lambda item: (item[1].voltage, -item[0]), default=None)
         if winner is None:
