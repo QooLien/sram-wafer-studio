@@ -356,6 +356,29 @@ const patternColor = name => {
   const index=Math.max(0,s.report.patterns.indexOf(name));
   return ['#f0ccee','#dddbf5','#f7d5c8'][index%3];
 };
+function renderWorstBlockList() {
+  const target=$('worst-block-list');
+  if(!target)return;
+  target.replaceChildren();
+  const names=s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase()));
+  const items=names.flatMap(pattern=>s.blocks.flatMap(entry=>entry.worst_vmin
+    .filter(hit=>hit.wt===s.wt&&hit.pattern===pattern)
+    .map(hit=>({pattern,blk:entry.blk,voltage:hit.voltage}))));
+  const heading=el('div',null,'worst-list-heading');
+  heading.append(el('h3','WT'+s.wt+' · Worst Scan / March Vmin'),
+    el('p','點選 BLK 可直接開啟明細；同一 Pattern 若有相同最差 Vmin，會列出所有並列 BLK。','tab-note'));
+  target.append(heading);
+  if(!items.length){target.append(el('p','此 WT 沒有可用的 Scan／March Vmin 資料。','tab-note'));return;}
+  const buttons=el('div',null,'worst-block-items');
+  for(const item of items){
+    const button=el('button',null,'worst-block-item');
+    button.append(el('strong',item.pattern),el('span','BLK '+item.blk),el('span',vfmt(item.voltage)));
+    button.title='開啟 '+item.pattern+' · BLK '+item.blk+' · '+vfmt(item.voltage);
+    button.onclick=()=>{$('blk-grid').children[item.blk]?.click();};
+    buttons.append(button);
+  }
+  target.append(buttons);
+}
 function showGridVmin() {
   const cells=$('blk-grid').children;
   const worstPatterns=new Map();
@@ -420,6 +443,7 @@ async function refreshGrid() {
     board.append(btn);
   }
   showGridVmin();
+  renderWorstBlockList();
 }
 function table(headers, rows) {
   const table=el('table'), head=el('thead'), body=el('tbody'), bar=el('tr');
@@ -542,7 +566,7 @@ function voltageDistribution(comparison) {
   const stride=(chart.right-chart.left)/groups.length;
   for (const [index,group] of groups.entries()) {
     const mid=chart.left+(index+.5)*stride;
-    const label=vfmt(group.voltage).slice(0,-2);
+    const label=vfmt(group.voltage).replace(/ V$/, 'v');
     chart.add('text',{x:mid,y:chart.bottom+76,transform:'rotate(-90 '+mid+' '+(chart.bottom+76)+')',
       'text-anchor':'start',class:'chart-label'},label);
     const barWidth=Math.max(4,Math.min(25,stride-5));
@@ -598,11 +622,8 @@ function patternCharts(details, initialPattern, showTables) {
   const names = Object.keys(details.fbc90);
   const panel = el('section',null,'detail-section pattern-charts');
   const heading = el('div',null,'toolbar');
-  const selector = el('select');
-  const field = el('label','Pattern');
-  field.append(selector);
-  heading.append(field);
-  options(selector,Object.fromEntries(names.map(name=>[name,name])),initialPattern);
+  const activePattern=names.includes(initialPattern)?initialPattern:names[0];
+  heading.append(el('span','Pattern: '+activePattern,'pattern-static-label'));
   const chartModes=el('div',null,'chips');
   chartModes.setAttribute('role','group');
   chartModes.setAttribute('aria-label','Voltage chart type');
@@ -622,7 +643,7 @@ function patternCharts(details, initialPattern, showTables) {
     button.dataset.patternExport = kind;
     button.disabled = s.busy;
     button.onclick = safe(async()=>{
-      const scope = {wt:s.wt,chip:s.selected.split(','),blk:s.block,pattern:selector.value,kind};
+      const scope = {wt:s.wt,chip:s.selected.split(','),blk:s.block,pattern:activePattern,kind};
       const {paths} = await api('pick',{kind:'folder'});
       if (!paths.length) return;
       exportStatus.hidden = false;
@@ -639,7 +660,7 @@ function patternCharts(details, initialPattern, showTables) {
   heading.append(actions);
   const charts = el('div',null,'chart-pair');
   const render = (updateTables=true) => {
-    const name = selector.value;
+    const name = activePattern;
     const stations = details.sweep.filter(row=>row.pattern===name);
     for(const [index,[mode]] of modes.entries()) {
       const button=chartModes.children[index];
@@ -656,7 +677,6 @@ function patternCharts(details, initialPattern, showTables) {
     charts.replaceChildren(...(showComparison?[voltageChart,accumulation]:[accumulation,voltageChart]));
     if(updateTables)showTables(name,stations);
   };
-  selector.onchange = ()=>{s.detailPattern=selector.value;render();};
   render();
   panel.append(heading,exportStatus,charts);
   return panel;
@@ -673,11 +693,11 @@ function preferredMarch(details) {
 async function refreshDetail(fromMatrix=false) {
   if(s.block===null)return;
   const id=++s.detailVersion;
-  const currentPattern=$('block-detail').querySelector('.pattern-charts select')?.value;
+  const currentPattern=s.detailPattern;
   const details=await api(params({view:'detail',...selection(),blk:s.block}));
   if(id!==s.detailVersion||s.page!=='maps')return;
   const march=fromMatrix?preferredMarch(details):null;
-  const initialPattern=march||currentPattern||s.detailPattern||s.pattern;
+  const initialPattern=march||currentPattern||s.pattern;
   const title=el('div',null,'section-title');
   const {x,y}=selection();
   title.append(el('h2','WT'+s.wt+' · X'+x+' Y'+y+' · BLK '+s.block),el('span',s.report.mode));
@@ -709,7 +729,10 @@ async function refreshDetail(fromMatrix=false) {
     });
     addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses));
   };
-  if(Object.keys(details.fbc90).length)body.append(patternCharts(details,initialPattern,showTables));
+  if(Object.keys(details.fbc90).length){
+    s.detailPattern=initialPattern;
+    body.append(patternCharts(details,initialPattern,showTables));
+  }
   const block=s.blocks[s.block];
   if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
