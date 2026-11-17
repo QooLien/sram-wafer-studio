@@ -153,7 +153,7 @@ def view(wafer, query):
     pattern = get("pattern", next(iter(wafer.config.patterns), ""))
     if kind == "map":
         layer = get("layer", "fail")
-        if layer not in MAPS or (layer in ("fail", "wr", "loss") and pattern not in wafer.config.patterns):
+        if (layer not in MAPS and layer != "vmin_pattern") or (layer in ("fail", "wr", "loss", "vmin_pattern") and pattern not in wafer.config.patterns):
             raise ValueError("Map 類型或 Pattern 無效。")
         return wafer.map(wt, pattern, layer)
     chip = None
