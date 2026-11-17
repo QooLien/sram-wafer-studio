@@ -522,7 +522,7 @@ function voltageDistribution(comparison) {
   for (const [index,group] of groups.entries()) {
     const mid=chart.left+(index+.5)*stride;
     const label=vfmt(group.voltage).slice(0,-2);
-    chart.add('text',{x:mid,y:chart.bottom+12,transform:'rotate(90 '+mid+' '+(chart.bottom+12)+')',
+    chart.add('text',{x:mid,y:chart.bottom+76,transform:'rotate(-90 '+mid+' '+(chart.bottom+76)+')',
       'text-anchor':'start',class:'chart-label'},label);
     const barWidth=Math.max(4,Math.min(25,stride-5));
     for (const [i,station] of group.stations.entries()) {
