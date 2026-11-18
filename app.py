@@ -81,7 +81,8 @@ def run_job(action, data):
                 raise ValueError("選取的 Chip 不在目前的 wafer。")
             if kind == "monitor":
                 folder = folder / f"Analysis_{date.today():%Y%m%d}"
-            output.append(str(save_report(wafer, folder, kind, chip=chip)))
+            output.append(str(save_report(wafer, folder, kind, chip=chip,
+                                          monitor_chips=correlation_chips(data.get("chips"), wafer) if kind == "monitor" else None)))
         else:
             full = action == "analyze"
             config = Config.create(data["rows"], data.get("mode", "FBC0"), full=full)
@@ -145,6 +146,19 @@ def settings_import(path):
     return {"rows": csv_config(path), "mode": "FBC0"} if path.suffix.lower() == ".csv" else workbook_config(path)
 
 
+def correlation_chips(raw, wafer):
+    if raw is None:
+        return None
+    value = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(value, list) or any(not isinstance(xy, list) or len(xy) != 2
+            or any(type(v) is not int for v in xy) for xy in value):
+        raise ValueError("Chip 選取必須是 X/Y 整數座標清單。")
+    chips = list(dict.fromkeys(tuple(xy) for xy in value))
+    if not set(chips).issubset(wafer.chips):
+        raise ValueError("選取的 Chip 不在目前 wafer。")
+    return chips
+
+
 def view(wafer, query):
     get = query.get
     number = int(get("wt", wafer.wt_numbers[0]))
@@ -175,7 +189,7 @@ def view(wafer, query):
         if kind == "monitor_correlation":
             if scope not in wafer.monitor_scopes:
                 raise ValueError("請選取 Scan、March 或 Scan & March。")
-            return wafer.monitor_correlation(wt, scope)
+            return wafer.monitor_correlation(wt, scope, chips=correlation_chips(get("chips"), wafer))
         if chip is None:
             raise ValueError("請先選取 Chip。")
         return wafer.vmin_distribution(wt, chip, scope, with_matches=get("matches") == "1")

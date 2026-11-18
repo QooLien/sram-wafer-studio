@@ -582,7 +582,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                                         for r in wafer.manifest))
 
 
-def write_monitor_report(wafer, path):
+def write_monitor_report(wafer, path, *, chips=None):
     import xlsxwriter
 
     with xlsxwriter.Workbook(path, {"strings_to_formulas": False, "strings_to_urls": False}) as book:
@@ -609,7 +609,7 @@ def write_monitor_report(wafer, path):
         total_row = detail_row = 1
         for wt in range(len(wafer.phases)):
             for scope, label in wafer.monitor_scopes.items():
-                report = wafer.monitor_correlation(wt, scope)
+                report = wafer.monitor_correlation(wt, scope, chips=chips)
                 number = "WT" + str(report["wt"])
                 counts = report["counts"]
                 found = sum(counts)
@@ -633,7 +633,7 @@ def write_monitor_report(wafer, path):
                            "Pearson r uses Chips with complete Function FBC and observed monitor data.")
 
 
-def save_report(wafer, folder, kind, stem=None, *, chip=None):
+def save_report(wafer, folder, kind, stem=None, *, chip=None, monitor_chips=None):
     folder.mkdir(parents=True, exist_ok=True)
     extension = "pptx" if kind == "ppt" else "xlsx"
     temperatures = "-".join(f"WT{wt}" for wt in wafer.wt_numbers)
@@ -644,7 +644,7 @@ def save_report(wafer, folder, kind, stem=None, *, chip=None):
         if kind == "ppt":
             write_ppt(wafer, part)
         elif kind == "monitor":
-            write_monitor_report(wafer, part)
+            write_monitor_report(wafer, part, chips=monitor_chips)
         else:
             write_excel(wafer, part, kind, chip=chip)
         part.rename(path)

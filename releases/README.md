@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.1.zip](SRAM%20Analysis%20Tool%20v1.8.1.zip)
+[下載 SRAM Analysis Tool v1.8.2.zip](SRAM%20Analysis%20Tool%20v1.8.2.zip)
 
-v1.8.1 每顆 Chip 新增 FBC90% Vmin 箱型圖與 16 × 16 離群位置圖。Tail 採 FBC90% Vmin 四分位上界與實際電壓階數，並列排除 Tail 前的最高 Vmin 與排除後的 Judge Vmin。
+v1.8.2 在 W/R 相關性頁面加入可選取 Wafer Map，支援 Shift＋左鍵多選 Chip，依選取更新散點、匹配統計及 Pearson r。散點支援滑鼠與鍵盤開啟 Chip／BLK 匹配明細，並可進入 256 BLK matrix。Excel 匯出同步篩選 Chip，保留原有全部 WT／Pattern。Vmin、Tail 與地址計數規則不變。
 
 保留版本：
 
+- [v1.8.1](SRAM%20Analysis%20Tool%20v1.8.1.zip)
 - [v1.8.0](SRAM%20Analysis%20Tool%20v1.8.0.zip)
 - [v1.7.16](SRAM%20Analysis%20Tool%20v1.7.16.zip)
 

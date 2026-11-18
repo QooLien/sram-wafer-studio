@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',correlation:'W/R 相關性',batch:'批次匯出',settings:'TNO 設定'};
 const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
-const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0, distributionVersion:0, distribution:null, correlationVersion:0};
+const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0, distributionVersion:0, distribution:null, correlationVersion:0, correlationSelection:null, correlationData:null, correlationDetailVersion:0, correlationContext:null};
 const nfmt = new Intl.NumberFormat('zh-TW');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const vminfmt = (result,value=result?.voltage) => (result?.relation==='>='&&value!=null?'≥ ':'')+vfmt(value);
@@ -149,6 +149,7 @@ function setReport(report) {
   $('dist-match-label').hidden=report.source_mode!=='full';
   options($('correlation-wt'),Object.fromEntries(report.wt_numbers.map(wt=>[wt,'WT'+wt])),s.wt);
   options($('correlation-scope'),report.monitor_scopes,report.monitor_scopes.merge?'merge':Object.keys(report.monitor_scopes)[0]);
+  s.correlationSelection=null;s.correlationData=null;s.correlationContext=null;++s.correlationDetailVersion;
   put('correlation-content');
   s.distribution=null;
   options($('pattern'),pats,s.pattern);
@@ -853,20 +854,100 @@ function monitorScatter(rows, side, label) {
   }
   for(const row of points){
     const title='X'+row.x+' Y'+row.y+' · '+label+' '+row[side]+' · Function '+row.function;
-    chartMark(chart,'circle',{cx:x(row[side]),cy:chart.y(row.function),r:4,fill:side==='write'?'#ad600b':'#2465a5','fill-opacity':0.8},title);
+    const point=chartMark(chart,'circle',{cx:x(row[side]),cy:chart.y(row.function),r:5,
+      role:'button',class:'correlation-point','data-chip':chipKey(row),fill:side==='write'?'#ad600b':'#2465a5','fill-opacity':0.8},title+' · 點選查看 Chip 明細');
+    point.onclick=safe(()=>openCorrelationChip(row));
+    point.onkeydown=safe(event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();return openCorrelationChip(row);}});
   }
   return chart.wrap;
 }
 
+async function openCorrelationChip(row) {
+  const token=++s.correlationDetailVersion;
+  const wt=$('correlation-wt').value,scope=$('correlation-scope').value;
+  $('modal-title').textContent='WT'+wt+' · X'+row.x+' Y'+row.y+' · W/R correlation';
+  const summary=table(['項目','數量／狀態'],[
+    ['Function FBC coverage',row.complete?'Complete':'Incomplete'],['Function captured addresses',row.function],
+    ['W-Low captured addresses',row.write??'No Data'],['R-Low captured addresses',row.read??'No Data'],
+    ['Eligible Fail BLKs',row.fail_blks??'No Data'],['BLKs with Function addresses',row.address_blks],
+    ...s.correlationData.labels.map((label,i)=>[label,row.counts[i]])]);
+  put('modal-content',summary,el('p','載入 BLK 匹配明細…','correlation-note'));
+  if(!$('modal').open)$('modal').showModal();
+  const detail=await api(params({view:'vmin_distribution',wt,scope,x:row.x,y:row.y,matches:'1'}));
+  if(token!==s.correlationDetailVersion||!$('modal').open)return;
+  const entries=detail.entries.filter(entry=>entry.matches?.some(Boolean));
+  const actions=el('div',null,'actions');
+  const matrix=el('button','開啟 256 BLK matrix','secondary');
+  const jump=async blk=>{
+    $('modal').close();s.wt=Number(wt);s.selected=chipKey(row);s.pattern=scope.startsWith('pattern:')?scope.slice(8):s.report.patterns[0];
+    s.layer='fail';s.block=null;s.blocks=[];s.mapStage='matrix';s.detailPattern=s.pattern;
+    $('pattern').value=s.pattern;$('layer').value=s.layer;$('data-wt').value=wt;
+    await navigate('maps');await refreshGrid();setMapStage('matrix',true);
+    if(blk!=null){s.block=blk;await refreshDetail();setMapStage('detail',true);}
+  };
+  matrix.onclick=safe(()=>jump(null));actions.append(matrix);
+  const blocks=table(['BLK','Function matched addresses',...s.correlationData.labels,'明細'],entries.map(entry=>{
+    const cell=el('td'),button=el('button','查看 BLK','quiet');button.onclick=safe(()=>jump(entry.blk));cell.append(button);
+    return [entry.blk,entry.matches.reduce((a,b)=>a+b,0),...entry.matches,cell];
+  }));
+  put('modal-content',summary,el('p','X 軸是整顆 Chip 的 monitor 擷取地址；Y 軸是所選範圍有效 BLK 的 Function 擷取地址，皆不是完整 FBC。','correlation-note'),actions,section('BLK matching breakdown',blocks));
+}
+function correlationMap() {
+  const rows=s.correlationData.rows, selected=s.correlationSelection;
+  const box=el('section',null,'card correlation-selection');
+  box.append(el('h2','Wafer Map · Chip 選取'),el('p','左鍵：選單顆；Shift＋左鍵：增減 Chip。顯示全部與未選任何 Chip 為不同狀態。','correlation-note'));
+  const controls=el('div',null,'toolbar');
+  for(const [label,value] of [['顯示全部',null],['清除選取',[]]]){
+    const button=el('button',label,'secondary');button.onclick=safe(()=>{s.correlationSelection=value;return updateCorrelationSelection();});controls.append(button);
+  }
+  controls.append(el('span',selected===null?'全部 '+rows.length+' 顆 Chip':'已選 '+selected.length+' / '+rows.length+' 顆 Chip','correlation-selection-count'));
+  box.append(controls);
+  if(!rows.length)return box;
+  const xs=rows.map(r=>r.x),ys=rows.map(r=>r.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  if(x1-x0>99||y1-y0>99){box.append(el('p','座標範圍超過 100，無法繪製此 Wafer Map。','correlation-note'));return box;}
+  const scroll=el('div',null,'correlation-wafer-scroll'),board=el('div',null,'correlation-wafer');
+  board.style.gridTemplateColumns='36px repeat('+(x1-x0+1)+',minmax(34px,1fr))';
+  const axis=(text,col,line)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=line;board.append(a);};
+  axis('Y/X',1,1);for(let x=x0;x<=x1;x++)axis(x,x-x0+2,1);for(let y=y0;y<=y1;y++)axis(y,1,y-y0+2);
+  for(const row of rows){
+    const key=chipKey(row),active=selected===null||selected.includes(key);
+    const button=el('button',row.complete?(row.function?'●':'0'):'?','correlation-chip');
+    button.dataset.chip=key;button.dataset.selected=String(active);button.setAttribute('aria-pressed',active);
+    button.style.gridColumn=row.x-x0+2;button.style.gridRow=row.y-y0+2;
+    button.classList.toggle('incomplete',!row.complete);
+    button.title='X'+row.x+' Y'+row.y+' · Function '+row.function+' · W '+(row.write??'No Data')+' · R '+(row.read??'No Data');
+    button.setAttribute('aria-label',button.title);
+    button.onclick=safe(event=>{
+      const keys=new Set(event.shiftKey?(s.correlationSelection??[]):[]);
+      if(event.shiftKey&&keys.has(key))keys.delete(key);else keys.add(key);
+      s.correlationSelection=[...keys];return updateCorrelationSelection();
+    });board.append(button);
+  }
+  scroll.append(board);box.append(scroll,el('p','● 有 Function 擷取地址；0 無 Function 擷取地址；? FBC coverage 不完整。框線代表已選取。','correlation-note'));
+  return box;
+}
 async function refreshCorrelation() {
-  const version=++s.correlationVersion;
+  const version=++s.correlationVersion;++s.correlationDetailVersion;
   const available=s.report?.source_mode==='full'&&Object.keys(s.report.monitor_scopes).length>0;
-  $('correlation-empty').hidden=available;
-  $('correlation-report').hidden=!available;
+  $('correlation-empty').hidden=available;$('correlation-report').hidden=!available;
   if(!available)return;
-  const wt=$('correlation-wt').value, scope=$('correlation-scope').value;
-  const data=await api(params({view:'monitor_correlation',wt,scope}));
+  const context=$('correlation-wt').value+'|'+$('correlation-scope').value;
+  const preserve=context===s.correlationContext;
+  const data=await api(params({view:'monitor_correlation',wt:$('correlation-wt').value,scope:$('correlation-scope').value}));
   if(version!==s.correlationVersion||s.page!=='correlation')return;
+  s.correlationData=data;s.correlationContext=context;
+  if(preserve&&s.correlationSelection!==null)return updateCorrelationSelection();
+  s.correlationSelection=null;renderCorrelation(data);
+}
+async function updateCorrelationSelection() {
+  const version=++s.correlationVersion;++s.correlationDetailVersion;
+  const chips=s.correlationSelection?.map(key=>key.split(',').map(Number));
+  const data=await api(params({view:'monitor_correlation',wt:$('correlation-wt').value,scope:$('correlation-scope').value,
+    ...(chips===undefined?{}:{chips:JSON.stringify(chips)})}));
+  if(version!==s.correlationVersion||s.page!=='correlation')return;
+  renderCorrelation(data);
+}
+function renderCorrelation(data) {
   const total=data.counts.reduce((sum,count)=>sum+count,0);
   const matched=total-data.counts[3];
   const pct=total?((matched/total)*100).toFixed(1)+'%':'—';
@@ -884,16 +965,17 @@ async function refreshCorrelation() {
     panel.append(el('p','Pearson r: '+(info.r==null?'—':info.r.toFixed(3))+' · Chips: '+nfmt.format(info.chips),'correlation-note'));
     charts.append(panel);
   }
-  const note=el('p','Counts use captured Fail Addresses in eligible BLKs, deduplicated by WT / Chip / BLK / WL / BL / IO. Pearson r uses chips with complete Function FBC and observed monitor data.','correlation-note');
-  const details=section('Chip Breakdown',table(['X','Y','Function FBC','Fail BLKs','BLKs with Address','Function Addresses',...data.labels,'W-Low Addresses','R-Low Addresses'],
-    data.rows.map(row=>[row.x,row.y,row.complete?'Complete':'Incomplete',row.fail_blks??'—',row.address_blks,row.function,...row.counts,row.write??'—',row.read??'—'])));
-  put('correlation-content',overview,charts,note,details);
+  const note=el('p','X: captured W/R addresses across each Chip. Y: captured Function addresses in eligible BLKs for the selected scope. Addresses are deduplicated by WT / Chip / BLK / WL / BL / IO. Pearson r uses selected Chips with complete Function FBC and observed monitor data.','correlation-note');
+  const details=section('Chip Breakdown',table(['X','Y','Function FBC coverage','Fail BLKs','BLKs with Address','Function Addresses',...data.labels,'W-Low Addresses','R-Low Addresses','明細'],
+    data.rows.map(row=>{const cell=el('td'),button=el('button','查看 Chip','quiet');button.onclick=safe(()=>openCorrelationChip(row));cell.append(button);
+      return [row.x,row.y,row.complete?'Complete':'Incomplete',row.fail_blks??'—',row.address_blks,row.function,...row.counts,row.write??'—',row.read??'—',cell];})));
+  put('correlation-content',correlationMap(),overview,charts,note,details);
 }
 $('correlation-wt').onchange=safe(refreshCorrelation);
 $('correlation-scope').onchange=safe(refreshCorrelation);
 $('correlation-export').onclick=safe(async()=>{
   const data=await api('pick',{kind:'folder'});
-  if(data.paths.length)await run('export',{kind:'monitor',folder:data.paths[0]});
+  if(data.paths.length)await run('export',{kind:'monitor',folder:data.paths[0],chips:s.correlationSelection?.map(key=>key.split(',').map(Number))});
 });
 
 function combinedAccumulation(details) {

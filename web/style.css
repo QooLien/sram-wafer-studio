@@ -233,3 +233,14 @@ text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
 .outlier-block.judge{border:2px solid #7c3aed}
 .outlier-block:hover,.outlier-block:focus-visible{outline:2px solid var(--accent);outline-offset:0;z-index:1}
 @media(max-width:1060px){.vmin-stat-plots{grid-template-columns:minmax(0,1fr)}}
+
+.correlation-selection h2{padding:14px 14px 0}
+.correlation-wafer-scroll{overflow:auto;padding:12px 14px}
+.correlation-wafer{display:grid;gap:4px;max-width:900px;margin:auto;align-items:center}
+.correlation-chip{padding:6px 2px;background:#e5edf4;border:2px solid transparent;min-height:34px}
+.correlation-chip[data-selected=true]{border-color:var(--accent);background:#d3eee8}
+.correlation-chip.incomplete{background:#ddd;color:#596878}
+.correlation-chip:focus-visible{outline-offset:2px}
+.correlation-point{cursor:pointer}
+.correlation-point:hover,.correlation-point:focus{stroke:#ae1424;stroke-width:3}
+.correlation-selection-count{font-weight:600}

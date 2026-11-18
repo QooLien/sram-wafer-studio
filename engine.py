@@ -823,12 +823,17 @@ class Wafer:
         return (counts_by_block, len(function_tnos) if complete else None,
                 observed(write_tnos, write_count), observed(read_tnos, read_count))
 
-    def monitor_correlation(self, wt, scope):
+    def monitor_correlation(self, wt, scope, *, chips=None):
         if self.source_mode != "full":
             raise ValueError("請匯入完整 FBC 與 Fail Address 資料。")
         patterns = self.monitor_patterns(scope)
+        selected = set(self.chips) if chips is None else set(chips)
+        if not selected.issubset(self.chips):
+            raise ValueError("選取的 Chip 不在目前 wafer。")
         rows = []
         for chip in self.chips:
+            if chip not in selected:
+                continue
             counts_by_block, fail_blks, write, read = self.block_monitor_matches(wt, chip, patterns)
             counts = [sum(block[i] for block in counts_by_block.values()) for i in range(len(MATCH_LABELS))]
             total = sum(counts)

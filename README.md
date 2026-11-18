@@ -36,3 +36,7 @@
 - 依 Chip、WT、所選 Vmin scope 計算 Tail。至少四筆確定數值的 FBC90% BLK Vmin 才計算上下界。Pass、缺資料及 ≥ 下限不納入四分位數。高於 Q3 + 1.5 × IQR 且從 Median 往上跨至少兩個實際測試電壓階，才判定為 Tail。電壓階以去重後的測試電壓順序由低到高計算。
 - Scan／March 各使用自己的測試範圍。Merge 90% 使用兩段共用的峰值。Chip Vmin 的箱型圖對每個 BLK 取各合格 Pattern 的最高 FBC90% Vmin。兩個電壓階以該 BLK 觸發 Pattern 的電壓計算。Judge 仍使用選定的 FBC 模式。Wafer Map 和矩陣採用同一份 Tail 清單。矩陣並列排除 Tail 前的最高值與排除後的 Judge Vmin。
 - 「核對既有 VBA 結果」可讀取同一本舊 .xlsm 內的 Config、Fail Address、FBC by BLK 和 Import Index，驗證來源後重新核對。桌面視窗負責互動，輸出的 .xlsx 報表是靜態資料。
+
+## W/R 相關性 Chip 選取
+
+W/R 相關性頁面的 Wafer Map 支援左鍵選單顆、Shift＋左鍵增減多顆 Chip。顯示全部恢復整片，清除選取顯示空集合。散點、匹配統計及 Pearson r 會依選取重新計算；缺少必要資料的 Chip 保留在 Map／清單，但不計入相關係數。點散點或 Chip Breakdown 的「查看 Chip」可開啟座標、地址數與各 BLK 匹配分類，並進入 256 BLK matrix 或 BLK 明細。相同座標的重疊散點可從清單逐顆查看。切換 WT／Pattern 會重設選取。Export Excel 依目前 Chip 選取匯出全部 WT／Pattern。
