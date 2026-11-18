@@ -8,7 +8,8 @@ from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
 
-from engine import MATCH_LABELS, MODES, voltage_text
+import json
+from engine import MATCH_LABELS, MODES, TAIL_MODE, voltage_text
 
 
 MAPS = {"fail": "Fail BLK", "wr": "W&R", "loss": "Fail BLK / Loss", "cat": "Cat Wafer Map",
@@ -27,7 +28,10 @@ VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "relation": "Vmin rel
                 "exact_only_cutoff": "Upper fence before observed fail samples (V)", "returned_from_tail": "BLKs returned from Tail",
                 "cutoff": "Tail upper fence (V)", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
                 "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs", "test_voltage": "Crossing test voltage (V)",
-                "voltage_tno": "Go/No-Go voltage TNO", "voltage_rule": "Voltage rule"}
+                "voltage_tno": "Go/No-Go voltage TNO", "voltage_rule": "Voltage rule",
+                "raw_voltage": "Original FBC0 Vmin (V)", "raw_relation": "Original FBC0 relation",
+                "tail_bit_baseline": "Max excluded early FBC", "tail_bit_tnos": "Excluded early FBC TNOs",
+                "adjustment_reason": "Tail FBC0 judgment reason"}
 
 
 def test_headers(wafer, comparison=False):
@@ -252,14 +256,20 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             ws.write_row(0, 0, ("TNO (Monitor)", "Func.", "Test Voltage", "TNO (Function)",
                                 "Func.", "Test Voltage", "Fail Cat.", "Stop Sign", "Vmin Mode"), head)
             ws.write_string(0, 9, wafer.config.mode, phase_headers[0])
+            ws.set_column("L:L", 26)
+            ws.set_column("M:M", 16)
+            ws.write_row(0, 11, ("Tail FBC0 setting", "Value"), head)
+            tail_settings = list(wafer.config.json()["tail_bits"].items())
             groups = [[t for t in wafer.config.tests if t.group == g] for g in ("Monitor", "Function")]
-            for row in range(max(map(len, groups))):
+            for row in range(max(*map(len, groups), len(tail_settings))):
                 if row < len(groups[0]):
                     test = groups[0][row]
                     ws.write_row(row + 1, 0, (test.tno, test.name, test.voltage))
                 if row < len(groups[1]):
                     test = groups[1][row]
                     ws.write_row(row + 1, 3, (test.tno, test.name, test.voltage, test.cat, test.stop or None))
+                if row < len(tail_settings):
+                    ws.write_row(row + 1, 11, tail_settings[row])
             ws.data_validation("J1", {"validate": "list", "source": list(MODES)})
 
         def address_sheet():
@@ -513,7 +523,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             for i, (name, color) in enumerate(colors.items()):
                 band(ws, 53 + i, 0, 14, name, map_cell_format(color, "#17324d", "", (1, 1, 1, 1)))
 
-        if report_mode == "full":
+        if report_mode == "full" or (report_mode == "fbc" and wafer.config.mode == TAIL_MODE):
             config_sheet()
         if report_mode in ("batch", "cat"):
             map_sheet("Cat Wafer Map", "cat", repair=True)
@@ -577,6 +587,24 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             map_sheet("Cat Wafer Map", "cat", repair=True)
             map_sheet("Chip Vmin Map", "vmin")
             block_distribution()
+        if wafer.config.mode == TAIL_MODE and report_mode in ("full", "fbc"):
+            def tail_audit_rows():
+                for wt in range(len(wafer.phases)):
+                    for xy in ([chip] if chip is not None else wafer.chips):
+                        for pattern, blk, crossing, peak, _ in wafer.crossings(wt, xy):
+                            audit = crossing.adjustment or {}
+                            if not peak and not audit.get("applied"):
+                                continue
+                            yield (wafer.wt_numbers[wt], *xy, blk, pattern, crossing.status,
+                                   audit.get("raw_voltage"), audit.get("raw_relation", ""),
+                                   crossing.voltage, crossing.relation, crossing.tno,
+                                   audit.get("applied", False), audit.get("baseline"),
+                                   ",".join(map(str, audit.get("ignored_tnos", []))),
+                                   audit.get("reason", crossing.status),
+                                   json.dumps(audit.get("evidence", [])), json.dumps(audit.get("settings", {})))
+            table("Tail FBC0 Audit", ["WT", "X", "Y", "BLK", "Pattern", "Status", "Original FBC0 Vmin (V)",
+                  "Original relation", "Selected Vmin (V)", "Selected relation", "TNO", "Adjusted",
+                  "Max excluded early FBC", "Excluded early FBC TNOs", "Reason", "Evidence", "Settings"], tail_audit_rows())
         if report_mode != "batch":
             cols = ["WT", "Path", "Full Lot", "Version", "STEP", "Files' WT", "Chips", "FBC rows", "Addresses",
                     "Invalid addresses", "Duplicate FBC", "Missing TNO", "Diagnostics"]

@@ -76,7 +76,7 @@ def address_index(book, config, headers):
 
 def read_existing(path, report=lambda _: None):
     settings = workbook_config(path)
-    config = Config.create(settings["rows"], settings["mode"])
+    config = Config.create(settings["rows"], settings["mode"], tail_bits=settings.get("tail_bits"))
     warnings, phases = [], {}
     book = load_workbook(path, read_only=True, data_only=True)
     try:

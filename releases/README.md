@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.5.zip](SRAM%20Analysis%20Tool%20v1.8.5.zip)
+[下載 SRAM Analysis Tool v1.8.6.zip](SRAM%20Analysis%20Tool%20v1.8.6.zip)
 
-v1.8.5 讓最高測試電壓 Fail 的 BLK 以實際 Fail 電壓（例如 1.035 V）參與 FBC90% Tail 統計；回報仍保留 ≥ Hard Fail 電壓。重新計算 Tail 與 Judge，顯示加入前後上界及回到候選的 BLK，Excel 同步提供統計來源與對照欄位。保留原有最少樣本、電壓步階、Hard Fail／Prior WT 排除及末端恢復電壓規則。
+v1.8.6 新增 FBC0-Tail（Tail-adjusted FBC0），逐 BLK／Function 以早期少量 FBC、增加倍率、電壓正規化斜率及低電壓後續確認辨識可排除區段，再依 FBC0 取前一電壓。提供六項門檻設定、原始／修正 Vmin、排除 TNO 與證據；Excel 保存設定與 Tail FBC0 Audit。預設值為待實測校準的保守起點；證據不足保留原始 FBC0。既有 FBC0–FBC10、FBC90%、三張 90% Accumulation 與 Merge 90% 均保留；Tail BLK 排除維持 FBC90% 基礎。
 
 保留版本：
 
+- [v1.8.5](SRAM%20Analysis%20Tool%20v1.8.5.zip)
 - [v1.8.4](SRAM%20Analysis%20Tool%20v1.8.4.zip)
 - [v1.8.3](SRAM%20Analysis%20Tool%20v1.8.3.zip)
 - [v1.8.2](SRAM%20Analysis%20Tool%20v1.8.2.zip)

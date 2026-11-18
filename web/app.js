@@ -87,7 +87,7 @@ function renderFiles(batch=false) {
   }));
 }
 function modes() {
-  const values = Object.fromEntries(Array.from({length:11}, (_,n)=>['FBC'+n,'FBC'+n]).concat([['FBC90%','FBC90%']]));
+  const values = Object.fromEntries(Array.from({length:11}, (_,n)=>['FBC'+n,'FBC'+n]).concat([['FBC90%','FBC90%'],['FBC0-Tail','FBC0 · Tail-adjusted']]));
   options($('vmin-mode'), values, s.mode);
 }
 function setBusy(value) {
@@ -213,14 +213,14 @@ $('demo').onclick = safe(async ()=>{
   const demo = await api('demo',{mode:s.mode}); s.files = demo.paths; s.demo = demo.config;
   $('full-profile').textContent = 'Using the 128-Chip demo TNO configuration'; renderFiles();
 });
-$('vmin-mode').onchange = () => {s.mode = $('vmin-mode').value;};
+$('vmin-mode').onchange = () => {s.mode = $('vmin-mode').value;$('tail-mode-hint').hidden=s.mode!=='FBC0-Tail';};
 $('run-full').onclick = safe(()=>{
   if(!s.files.length) throw new Error('Select ASC files or load the 128-Chip demo first.');
-  return run('analyze',{paths:s.files, rows:(s.demo || s.config.full).rows, mode:s.mode, source_mode:$('source-mode').value});
+  return run('analyze',{paths:s.files, rows:(s.demo || s.config.full).rows, mode:s.mode, tail_bits:s.config.full.tail_bits, source_mode:$('source-mode').value});
 });
 $('run-batch').onclick = safe(()=>{
   if(!s.batch.length) throw new Error('Select ASC files first.');
-  return run('batch',{paths:s.batch, rows:s.config.batch.rows, mode:s.config.batch.mode});
+  return run('batch',{paths:s.batch, rows:s.config.batch.rows, mode:s.config.batch.mode,tail_bits:s.config.batch.tail_bits});
 });
 
 $('open-xlsm').onclick = safe(async()=>{
@@ -285,7 +285,7 @@ function showChip(row) {
                 ['Read / Write',row.wr[0]+' / '+row.wr[1]],['RW / No Monitor',row.wr[2]+' / '+row.wr[3]]);
   }
   if(row.reason)fields.push(['Judgment reason',row.reason]);
-  if(row.voltage_rule==='terminal-recovery')fields.push(['Judgment reason',crossingReason(row)]);
+  if(row.adjustment||row.voltage_rule==='terminal-recovery')fields.push(['Judgment reason',crossingReason(row)]);
   const details=el('dl');
   for(const [k,v] of fields){const line=el('div');line.append(el('dt',k),el('dd',v));details.append(line);}
   const link=el('button','View Chip data','secondary');
@@ -402,7 +402,7 @@ async function refreshMap() {
     ]:[['#f3d86b','No valid Vmin']]);
     for(const [i,pattern] of [...dualPatterns,'Merge 90%'].entries()){
       const panel=el('section',null,'wafer-vmin-panel');
-      panel.append(el('h3',pattern+' Vmin'));
+      panel.append(el('h3',pattern+' Vmin'+(pattern!=='Merge 90%'&&s.report.mode==='FBC0-Tail'?' · Tail-adjusted FBC0':'')));
       const map=el('div',null,'wafer');
       renderBoard(map,datasets[i],commonScale,pattern);
       panel.append(map);pair.append(panel);
@@ -504,6 +504,7 @@ async function refreshDistribution() {
       entry.peak_fbc?'Peak FBC '+nfmt.format(entry.peak_fbc):'',
       entry.fbc90_voltage==null?'':'FBC90% '+vminfmt({relation:entry.fbc90_relation},entry.fbc90_voltage),
       entry.steps_above_median==null?'':entry.steps_above_median+' voltage steps above median',
+      entry.adjustment?crossingReason(entry):'',
       ...(matches?entry.matches.map((count,index)=>matchLabels[index]+': '+nfmt.format(count)):[]),
       ...s.blocks[entry.blk].states.map(phase=>'WT'+phase.wt+' '+phase.status)].filter(Boolean).join(' · ');
     tile.title=title;
@@ -719,6 +720,8 @@ function chartMark(chart, tag, attrs, description) {
   return mark;
 }
 function crossingReason(result) {
+  const audit=result.adjustment;
+  if(audit)return audit.reason+' Original FBC0: '+(audit.raw_voltage==null?'Unavailable':vminfmt({relation:audit.raw_relation},audit.raw_voltage))+(audit.applied?' · Excluded early FBC TNOs: '+audit.ignored_tnos.join(', '):'')+(result.voltage_rule==='terminal-recovery'?' · Terminal recovery uses Go/No-Go TNO '+result.voltage_tno:'');
   if(result.voltage_rule==='terminal-recovery')return 'Terminal recovery voltage; using Go/No-Go TNO '+result.voltage_tno+' ('+vfmt(result.voltage)+'); original crossing voltage: '+vfmt(result.test_voltage)+'.';
   const reasons={
     'Hard Fail':'This BLK is excluded by Hard Fail.',
@@ -729,7 +732,7 @@ function crossingReason(result) {
     'Below':'The selected FBC threshold has not been reached.'
   };
   if(result.relation==='>=')return 'The highest test voltage failed. Vmin is a lower bound at the configured Hard Fail voltage, not an exact measurement.';
-  if(result.status==='No Vmin')return s.report.mode==='FBC0'
+  if(result.status==='No Vmin')return ['FBC0','FBC0-Tail'].includes(s.report.mode)
     ? 'FBC0 has no voltage group before the first failure: the first group failed or the preceding voltage is not configured.'
     : 'The crossing TNO has no configured test voltage.';
   return reasons[result.status]??('Using '+s.report.mode+' threshold.');
@@ -1236,6 +1239,18 @@ async function refreshDetail(fromMatrix=false) {
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
   body.append(section('Vmin judgment',table(['Pattern','Status','TNO','Func.','Vmin','Peak FBC','Judgment reason'],
     details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,c.voltage==null?c.status:vminfmt(c),c.peak,crossingReason(c)])),true));
+  const adjustments=details.crossings.filter(c=>c.adjustment);
+  if(adjustments.length){
+    const audit=el('div');
+    for(const c of adjustments){
+      const a=c.adjustment;
+      audit.append(el('h3',c.pattern+' · '+(a.applied?'Adjusted':'Original FBC0 retained')),
+        el('p',crossingReason(c),'correlation-note'));
+      if(a.evidence.length)audit.append(table(['Function','Early FBC ceiling','Effective FBC threshold','Main onset voltage','Onset FBC','Increase ratio','Slope (bits/V)','Slope ratio','Confirmation FBC'],
+        a.evidence.map(e=>[e.function,e.baseline,e.effective_fbc_threshold,vfmt(e.onset_voltage),e.onset_fbc,e.jump_ratio.toFixed(2),e.slope_bits_per_v.toFixed(2),e.slope_ratio.toFixed(2),e.confirmation_fbc.join(', ')])));
+    }
+    body.append(section('Tail-adjusted FBC0 evidence',audit));
+  }
   body.append(sweep,address);
   put('block-detail',title,body);setMapStage(s.mapStage);
   return march?sweep:null;
@@ -1351,9 +1366,34 @@ $('open-export').onclick=safe(()=>{
   modal('Export Report',block);
 });
 function profile() {return $('profile').value;}
+function renderTailBitSettings(current,full) {
+  const defaults={max_tail_bits:10,max_tail_fraction:.05,jump_ratio:5,slope_ratio:5,min_gap_steps:2,confirmation_points:2};
+  current.tail_bits={...defaults,...current.tail_bits};
+  const box=$('tail-bit-settings');box.hidden=!full;
+  if(!full)return;
+  const mode=el('select');options(mode,{'FBC0':'FBC0',...Object.fromEntries(Array.from({length:10},(_,i)=>['FBC'+(i+1),'FBC'+(i+1)])),'FBC90%':'FBC90%','FBC0-Tail':'FBC0 · Tail-adjusted'},s.mode);
+  mode.id='settings-vmin-mode';mode.setAttribute('aria-label','Vmin judgment mode');
+  mode.onchange=()=>{s.mode=mode.value;modes();$('tail-mode-hint').hidden=s.mode!=='FBC0-Tail';};
+  const label=el('label','Vmin judgment mode');label.append(mode);
+  const fields=el('div',null,'tail-fields');
+  for(const [key,title,min,max,step] of [
+    ['max_tail_bits','Maximum early FBC (bits)',1,1000000,1],
+    ['max_tail_fraction','Early FBC / onset FBC (max)',.000001,.5,'any'],
+    ['jump_ratio','Minimum FBC increase ratio',2,1000000,.5],
+    ['slope_ratio','Minimum slope increase ratio',2,1000000,.5],
+    ['min_gap_steps','Minimum voltage intervals',1,1000000,1],
+    ['confirmation_points','Main-fail confirmation points',2,1000000,1]]){
+    const field=el('label',title),input=el('input');input.type='number';
+    input.id='tail-'+key;input.min=min;input.max=max;input.step=step;input.value=current.tail_bits[key];
+    input.setAttribute('aria-label',title);input.oninput=()=>{current.tail_bits[key]=input.value;};field.append(input);fields.append(field);
+  }
+  box.replaceChildren(el('h3','Tail-adjusted FBC0 · per BLK / per Function'),label,fields,
+    el('p','Applies only to FBC0-Tail. Early FBC must meet both the absolute ceiling and its fraction of the onset FBC; a confirmed slope change is required. Defaults are conservative starting values, not calibrated device limits. Missing data, changing Function coverage or weak evidence retains original FBC0. Re-import to apply changed settings to existing results. Existing FBC90% accumulation and Merge 90% remain available.','correlation-note'));
+}
 function renderSettings() {
   const current=s.config[profile()];if(!current)return;
   const full=profile()==='full', header=el('tr');
+  renderTailBitSettings(current,full);
   const fields=[['tno','TNO'],['name','Func.'],['voltage','Voltage (V)'],['cat','Fail Cat.']];
   if(full)fields.push(['stop','Stop Sign']);
   for(const title of ['Group',...fields.map(f=>f[1]),'Row actions'])header.append(el('th',title));
@@ -1385,15 +1425,15 @@ $('profile').onchange=renderSettings;
 $('add-row').onclick=()=>{s.config[profile()].rows.push({group:'Function',tno:'',name:'',voltage:'',cat:'',stop:''});renderSettings();$('config-rows').lastChild?.scrollIntoView({block:'nearest'});};
 $('pick-config').onclick=safe(async()=>{
   const result=await api('pick',{kind:'settings'});
-  if(result.config){s.config[profile()]=result.config;renderSettings();notice('Loaded '+result.paths[0].split(/[\\/]/).pop()+'. Edit and save as needed.');}
+  if(result.config){s.config[profile()]=result.config;if(profile()==='full'){s.mode=result.config.mode;modes();$('tail-mode-hint').hidden=s.mode!=='FBC0-Tail';}renderSettings();notice('Loaded '+result.paths[0].split(/[\\/]/).pop()+'. Edit and save as needed.');}
 });
 $('save-config').onclick=safe(async()=>{
   const key=profile(), data=s.config[key];
-  s.config[key]=await api('save-settings',{profile:key,rows:data.rows,mode:key==='full'?s.mode:data.mode});
+  s.config[key]=await api('save-settings',{profile:key,rows:data.rows,mode:key==='full'?s.mode:data.mode,tail_bits:data.tail_bits});
   renderSettings();notice('Saved '+(key==='full'?'Full analysis':'Batch export')+' configuration.');
 });
 const initialize = safe(async () => {
-  const settings=await api('settings');s.config=settings.settings;s.mode=s.config.full.mode;modes();
+  const settings=await api('settings');s.config=settings.settings;s.mode=s.config.full.mode;modes();$('tail-mode-hint').hidden=s.mode!=='FBC0-Tail';
   renderFiles();renderFiles(true);
   const result=await api('status');s.last=result;
   if(result.data)setReport(result.data);

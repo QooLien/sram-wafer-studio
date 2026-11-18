@@ -5,7 +5,7 @@ from __future__ import annotations
 from array import array
 from bisect import bisect_right
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from functools import cached_property
 from itertools import combinations
 from math import isfinite
@@ -17,7 +17,8 @@ from typing import Callable
 
 BLKS = 256
 ALL = (1 << BLKS) - 1
-MODES = tuple(f"FBC{i}" for i in range(11)) + ("FBC90%",)
+TAIL_MODE = "FBC0-Tail"
+MODES = tuple(f"FBC{i}" for i in range(11)) + ("FBC90%", TAIL_MODE)
 GROUPS = ("Read Fail", "Write Fail", "Write&Read Fail", "No monitor item Fail")
 MATCH_LABELS = ("Read only", "Write only", "Write & Read", "No monitor hit")
 TAG = re.compile(r"\b(TNO|X|Y)\s*=\s*([+-]?\d+)(?=\s|[,;]|$)", re.I)
@@ -62,15 +63,54 @@ class Test:
         return f"{self.name}_{voltage_text(self.voltage)}v"
 
 
+@dataclass(frozen=True)
+class TailBitSettings:
+    max_tail_bits: int = 10
+    max_tail_fraction: float = .05
+    jump_ratio: float = 5.0
+    slope_ratio: float = 5.0
+    min_gap_steps: int = 2
+    confirmation_points: int = 2
+
+    @classmethod
+    def create(cls, values=None):
+        if values is None:
+            return cls()
+        if not isinstance(values, dict) or set(values).difference(cls.__dataclass_fields__):
+            raise ValueError("Invalid Tail-adjusted FBC0 settings.")
+        settings = asdict(cls()) | values
+        for key, value in settings.items():
+            if isinstance(value, bool):
+                raise ValueError("Tail-adjusted FBC0 settings must be numeric.")
+            try:
+                number = float(value)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError("Tail-adjusted FBC0 settings must be numeric.") from exc
+            if not isfinite(number):
+                raise ValueError("Tail-adjusted FBC0 settings must be finite.")
+            if key in ("max_tail_bits", "min_gap_steps", "confirmation_points"):
+                minimum = 2 if key == "confirmation_points" else 1
+                if number != int(number) or not minimum <= number <= 1000000:
+                    raise ValueError(f"Invalid Tail-adjusted FBC0 setting: {key}.")
+                settings[key] = int(number)
+            else:
+                minimum, maximum = ((.000001, .5) if key == "max_tail_fraction" else (2, 1000000))
+                if not minimum <= number <= maximum:
+                    raise ValueError(f"Invalid Tail-adjusted FBC0 setting: {key}.")
+                settings[key] = number
+        return cls(**settings)
+
+
 @dataclass
 class Config:
     tests: tuple[Test, ...]
     mode: str
+    tail_bits: TailBitSettings = field(default_factory=TailBitSettings)
 
     @classmethod
-    def create(cls, rows, mode="FBC0", *, full=True):
+    def create(cls, rows, mode="FBC0", *, full=True, tail_bits=None):
         if mode not in MODES:
-            raise ValueError("Select FBC0 through FBC10 or FBC90%.")
+            raise ValueError("Select FBC0 through FBC10, FBC90% or FBC0-Tail.")
         tests = []
         used = set()
         for i, row in enumerate(rows, 2):
@@ -107,7 +147,7 @@ class Config:
             tests.append(Test(group, tno, name, voltage, cat, stop if full else ""))
         if not tests:
             raise ValueError("Configuration requires at least one TNO.")
-        result = cls(tuple(sorted(tests, key=lambda t: t.group != "Monitor")), mode)
+        result = cls(tuple(sorted(tests, key=lambda t: t.group != "Monitor")), mode, TailBitSettings.create(tail_bits))
         result.patterns
         if full and not result.patterns:
             raise ValueError("Function requires at least one Pattern endpoint (Stop Sign).")
@@ -163,7 +203,7 @@ class Config:
         return list(dict.fromkeys(self.index[tno].voltage for tno in tnos))
 
     def json(self):
-        return {"mode": self.mode, "rows": [asdict(t) for t in self.tests]}
+        return {"mode": self.mode, "tail_bits": asdict(self.tail_bits), "rows": [asdict(t) for t in self.tests]}
 
 
 def csv_config(path: Path):
@@ -400,6 +440,7 @@ class Crossing:
     test_voltage: float | None = None
     voltage_tno: int | None = None
     voltage_rule: str = ""
+    adjustment: dict | None = None
 
 
 def flow_voltage_references(scope):
@@ -419,7 +460,82 @@ def flow_voltage_references(scope):
     return references
 
 
-def vmin(scope, values, mode, *, hard_voltage=None):
+def tail_adjusted_fbc0(scope, values, *, hard_voltage=None, settings=None):
+    """Suppress supported early low-count observations, never subtract captured addresses."""
+    settings = settings or TailBitSettings()
+    raw = vmin(scope, values, "FBC0", hard_voltage=hard_voltage)
+    audit = {"applied": False, "raw_voltage": raw.voltage, "raw_relation": raw.relation,
+             "raw_tno": raw.tno, "ignored_tnos": [], "baseline": 0, "evidence": [],
+             "settings": asdict(settings)}
+
+    def fallback(reason):
+        return replace(raw, adjustment=audit | {"reason": reason})
+
+    if raw.status == "Pass":
+        return fallback("All FBC observations pass; no adjustment.")
+    if len(values) != len(scope) or any(v is None for v in values):
+        return fallback("Incomplete FBC; original FBC0 retained.")
+    if not scope or any(t.voltage is None for t in scope):
+        return fallback("Incomplete test voltages; original FBC0 retained.")
+    recovery = flow_voltage_references(scope)
+    stations = []
+    for index, test in enumerate(scope):
+        if index in recovery:
+            continue
+        if not stations or stations[-1][0] != test.voltage:
+            if stations and test.voltage >= stations[-1][0]:
+                return fallback("Non-descending voltage sweep; original FBC0 retained.")
+            stations.append((test.voltage, {}))
+        stations[-1][1].setdefault(test.name, []).append(index)
+    if not stations:
+        return fallback("No descending voltage sweep; original FBC0 retained.")
+    functions = set(stations[0][1])
+    if any(set(items) != functions for _, items in stations):
+        return fallback("Function coverage changes between voltages; original FBC0 retained.")
+    filtered = list(values)
+    for function in sorted(functions):
+        counts = [max(values[i] for i in items[function]) for _, items in stations]
+        first = next((i for i, count in enumerate(counts) if count > 0), None)
+        if first is None:
+            continue
+        slopes = [max(0, counts[i] - counts[i-1]) / (stations[i-1][0] - stations[i][0])
+                  for i in range(1, len(stations))]
+        for index in range(first + settings.min_gap_steps, len(stations) - settings.confirmation_points + 1):
+            baseline, current = max(counts[:index]), counts[index]
+            if not (0 < baseline <= settings.max_tail_bits
+                    and baseline <= settings.max_tail_fraction * current):
+                continue
+            jump = (current + 1) / (baseline + 1)
+            previous_slope = max(slopes[:index-1], default=0)
+            # One bit over this interval is the slope floor for a perfectly flat prefix.
+            slope_floor = 1 / (stations[index-1][0] - stations[index][0])
+            acceleration = slopes[index-1] / max(previous_slope, slope_floor)
+            confirmation = counts[index:index + settings.confirmation_points]
+            if (jump < settings.jump_ratio or acceleration < settings.slope_ratio
+                    or any(count < current for count in confirmation)):
+                continue
+            ignored = [i for _, items in stations[:index] for i in items[function] if values[i] > 0]
+            for i in ignored:
+                filtered[i] = 0
+            audit["ignored_tnos"].extend(scope[i].tno for i in ignored)
+            audit["baseline"] = max(audit["baseline"], baseline)
+            audit["evidence"].append({"function": function, "baseline": baseline,
+                "effective_fbc_threshold": baseline + 1, "onset_voltage": stations[index][0],
+                "onset_tnos": [scope[i].tno for i in stations[index][1][function]],
+                "onset_fbc": current, "jump_ratio": jump, "slope_bits_per_v": slopes[index-1],
+                "slope_ratio": acceleration, "confirmation_fbc": confirmation})
+            break
+    if not audit["ignored_tnos"]:
+        return fallback("No confirmed low-count prefix and slope change; original FBC0 retained.")
+    audit["ignored_tnos"] = [t.tno for t in scope if t.tno in set(audit["ignored_tnos"])]
+    adjusted = vmin(scope, filtered, "FBC0", hard_voltage=hard_voltage)
+    return replace(adjusted, adjustment=audit | {"applied": True,
+        "reason": "Confirmed early low-count observations excluded; FBC0 applied to remaining observations."})
+
+
+def vmin(scope, values, mode, *, hard_voltage=None, tail_bits=None):
+    if mode == TAIL_MODE:
+        return tail_adjusted_fbc0(scope, values, hard_voltage=hard_voltage, settings=tail_bits)
     available = [v for v in values if v is not None]
     peak = max(available, default=0)
     if mode == "FBC90%":
@@ -523,7 +639,13 @@ def select_vmin(readings, tail=()):
             "relation": crossing.relation if crossing else "",
             "test_voltage": crossing.test_voltage if crossing else None,
             "voltage_tno": crossing.voltage_tno if crossing else None,
-            "voltage_rule": crossing.voltage_rule if crossing else ""}
+            "voltage_rule": crossing.voltage_rule if crossing else "",
+            "adjustment": crossing.adjustment if crossing else None,
+            "raw_voltage": crossing.adjustment["raw_voltage"] if crossing and crossing.adjustment else None,
+            "raw_relation": crossing.adjustment["raw_relation"] if crossing and crossing.adjustment else "",
+            "tail_bit_baseline": crossing.adjustment["baseline"] if crossing and crossing.adjustment else None,
+            "tail_bit_tnos": crossing.adjustment["ignored_tnos"] if crossing and crossing.adjustment else [],
+            "adjustment_reason": crossing.adjustment["reason"] if crossing and crossing.adjustment else ""}
 
 
 def observed_category(write, read):
@@ -766,7 +888,7 @@ class Wafer:
                     continue
                 values = [vector[b] if vector is not None else None for vector in vectors]
                 peak = max((v for v in values if v is not None), default=0)
-                yield name, b, vmin(scope, values, mode, hard_voltage=self.config.hard_voltage), peak, sweep_complete
+                yield name, b, vmin(scope, values, mode, hard_voltage=self.config.hard_voltage, tail_bits=self.config.tail_bits), peak, sweep_complete
             prior_valid &= endpoint is not None
             prior |= endpoint or 0
 
@@ -905,12 +1027,11 @@ class Wafer:
 
     def vmin_distribution(self, wt, chip, scope="chip", *, with_matches=False):
         """Expose the exact FBC90% readings and the actual map Judge for the selected scope."""
-        mode = self.config.mode if scope == "chip" else "FBC90%"
+        mode = self.config.mode if scope == "chip" or (scope != "merge" and self.config.mode == TAIL_MODE) else "FBC90%"
         if scope == "chip":
             summary, readings, peaks, unknown, past, fbc90, stats, outliers = self._chip_vmin_data(wt, chip)
         else:
-            summary, readings, peaks, stats, outliers = self._pattern_vmin_data(wt, chip, scope)
-            fbc90 = readings
+            summary, readings, peaks, stats, outliers, fbc90 = self._pattern_vmin_data(wt, chip, scope)
             unknown, past = set(), 0
         hard = set(summary["hard"])
         tails = set(summary["tail"])
@@ -993,12 +1114,17 @@ class Wafer:
             pattern = names[0]
             gate_status, reason = self.pattern_vmin_eligibility(wt, chip, pattern)
             readings = {}
-            for name, blk, crossing, peak, _ in self.crossings(wt, chip, mode="FBC90%"):
+            pattern_mode = TAIL_MODE if self.config.mode == TAIL_MODE else "FBC90%"
+            for name, blk, crossing, peak, _ in self.crossings(wt, chip, mode=pattern_mode):
                 if name == pattern:
                     readings[blk] = name, crossing
                     peaks[blk] = peak
 
-        stats, outliers, tail = voltage_distribution(readings, {None: voltages})
+        fbc90 = readings
+        if scope != "merge" and self.config.mode == TAIL_MODE:
+            fbc90 = {blk: (name, crossing) for name, blk, crossing, _, _ in
+                     self.crossings(wt, chip, mode="FBC90%") if name == pattern}
+        stats, outliers, tail = voltage_distribution(fbc90, {None: voltages})
         selected = select_vmin({} if gate_status else readings, tail)
         before_tail = select_vmin({} if gate_status else readings)
         kept = [crossing for blk, (_, crossing) in readings.items() if blk not in tail
@@ -1016,7 +1142,7 @@ class Wafer:
                               "hard": list(bits(hard)), "prior": past.bit_count(),
                               "remaining": len(kept), "incomplete": incomplete, "before_tail": before_tail}
         summary.update(tail_summary(stats))
-        return summary, readings, peaks, stats, outliers
+        return summary, readings, peaks, stats, outliers, fbc90
 
     def merged_fbc90(self, wt, chip, blk):
         return next(self._merged_fbc90_rows(wt, chip, (blk,)))[1]

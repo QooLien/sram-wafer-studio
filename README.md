@@ -46,3 +46,31 @@ Stop Sign flow 尾端若回升電壓，達標項目改回溯到該 flow 最後�
 ## English interface and W/R wafer colours
 
 The application interface, validation messages and progress notifications are in English. Source filenames, configured Pattern/Stop Sign names and raw data are retained as supplied. The W/R Correlation map compares captured monitor address counts: orange = W worse (W > R), blue = R worse (R > W), purple = equal positive counts, green = both captured counts zero, grey = incomplete Function coverage or unavailable monitor data. These categories do not imply physical failure severity or complete FBC. Selection outlines preserve category colours during Shift-click multi-selection.
+
+### Tail-adjusted FBC0（v1.8.6）
+
+在 Vmin Mode 選擇 **FBC0 · Tail-adjusted**（內部名稱 `FBC0-Tail`），在 **TNO Configuration** 設定門檻並儲存；設定或模式改變後須重新匯入分析。預設仍為 FBC0，現有 FBC0–FBC10、FBC90% 不變。新模式套用 Chip Vmin、Scan／March／其他 Stop Sign 的 Vmin 與 BLK 明細；Merge 90% 及三張 FBC90% Accumulation 仍使用原算法。Tail BLK 排除仍使用原 FBC90% 統計，與 BLK 內早期 Fail 的排除分開。
+
+逐 BLK、逐相同名稱的 Function，依 Config 原順序比較嚴格降壓區段。同電壓連續測項合併為一站，相同 Function 使用最大 FBC，不相加；各站 Function 組合須一致。末端升壓恢復測項不參與轉折或後續確認，但其原有 Go/No-Go Vmin 規則保留。
+
+對每個 Function 尋找最早符合下列所有條件的主要 Fail 起點：
+
+- 早期 FBC 上限為起點前最大 FBC，必須大於 0，且同時不超過絕對上限及起點 FBC 的指定比例。
+- 增加倍率為 `(起點 FBC + 1) / (早期 FBC 上限 + 1)`。
+- 斜率為 `max(0, 本站 FBC - 前站 FBC) / (前站電壓 - 本站電壓)`。起點斜率需達到此前最大斜率的指定倍數；此前斜率下限設為「起點電壓區間內增加 1 bit」的斜率，避免平坦區段除以零。
+- 起點與第一個非零 FBC 之間需有足夠的不同電壓區間，且從起點開始的指定數量測站均維持不低於起點的 FBC。
+
+| 設定 | 預設值 |
+|---|---:|
+| Maximum early FBC | 10 bit |
+| Early FBC / onset FBC（上限） | 0.05（5%） |
+| Minimum FBC increase ratio | 5 |
+| Minimum slope increase ratio | 5 |
+| Minimum voltage intervals | 2 |
+| Main-fail confirmation points（含起點） | 2 |
+
+這些預設值為保守起點，未經正式器件資料校準。各 BLK 的實際早期 FBC 基準由本身曲線決定；例如可能分別為 2 bit、10 bit，而非所有 BLK 共用固定 FBC 判定。符合條件時，只在判定用副本中忽略該 Function 起點之前的非零 FBC 觀測，再對整個 Pattern 套用 FBC0；未確認的其他 Function 失效仍保留。原始 FBC、Fail BLK／Pattern eligibility、Hard Fail／Prior WT 排除均不更動。資料不足、Function 覆蓋不一致、內部電壓回升或無明確轉折時保留原始 FBC0。
+
+例：`0 → 1 → 2 → 80 → 500` 對應 `1.035 → 0.990 → 0.945 → 0.900 → 0.855 V`，可將 1、2 FBC 的早期觀測列為排除候選，修正 FBC0 Vmin 為 0.945 V。這是 FBC 曲線啟發式，不代表已辨識或扣除相同物理地址的 Tail Bit。
+
+BLK 明細新增 **Tail-adjusted FBC0 evidence**，顯示原始／修正 Vmin、排除 TNO、早期 FBC 基準、有效 FBC 門檻（早期上限＋1）、增加倍率、斜率與後續確認。完整 Excel 與 FBC Excel 新增 **Tail FBC0 Audit**；Config 的 L:M 欄保存六項設定，重新匯入 Excel Config 時一併還原。只有證據充分的 Function 會排除早期觀測，其他少量 Fail 不會自動忽略。

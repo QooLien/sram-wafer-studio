@@ -31,7 +31,7 @@
   <div class="card import-card">
     <div class="import-head"><div><h2>Raw Data</h2><p id="file-count">No files selected</p></div><div class="actions"><button id="demo" class="quiet">Load 128-Chip demo</button><button id="pick-full" class="secondary">Select ASC</button></div></div>
     <div id="full-files" class="file-list"></div>
-    <div class="import-footer"><label>Import mode <select id="source-mode"><option value="full">Import and analyze</option><option value="address">Fail Address only</option><option value="fbc">FBC only</option></select></label><label>Vmin Mode <select id="vmin-mode"></select></label><span id="full-profile"></span><button id="run-full" class="primary">Start import →</button></div>
+    <div class="import-footer"><label>Import mode <select id="source-mode"><option value="full">Import and analyze</option><option value="address">Fail Address only</option><option value="fbc">FBC only</option></select></label><label>Vmin Mode <select id="vmin-mode"></select></label><span id="full-profile"></span><span id="tail-mode-hint" hidden>Tail-adjusted FBC0 uses per-BLK / per-Function evidence. Configure thresholds in TNO Configuration.</span><button id="run-full" class="primary">Start import →</button></div>
   </div>
 </section>
 <section class="page" id="page-maps" hidden>
@@ -127,6 +127,7 @@
   <div class="heading"><h1>TNO Configuration</h1><p>Function row order determines Vmin and Pattern boundaries. Set Stop Sign on the last station of each Pattern.</p></div>
   <section class="card">
     <div class="toolbar"><label>Configuration <select id="profile"><option value="full">Full analysis</option><option value="batch">Batch export</option></select></label><button id="pick-config" class="secondary">Import Excel / CSV</button><button id="add-row" class="quiet">＋ Add row</button><button id="save-config" class="primary">Save configuration</button></div>
+    <div id="tail-bit-settings" class="tail-bit-settings"></div>
     <div class="table-scroll config-wrap"><table class="config"><thead id="config-head"></thead><tbody id="config-rows"></tbody></table></div>
   </section>
 </section>

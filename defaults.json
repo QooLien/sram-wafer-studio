@@ -618,7 +618,15 @@
         "cat": 18,
         "stop": "March"
       }
-    ]
+    ],
+    "tail_bits": {
+      "max_tail_bits": 10,
+      "max_tail_fraction": 0.05,
+      "jump_ratio": 5.0,
+      "slope_ratio": 5.0,
+      "min_gap_steps": 2,
+      "confirmation_points": 2
+    }
   },
   "batch": {
     "mode": "FBC0",
@@ -1095,6 +1103,14 @@
         "cat": 18,
         "stop": ""
       }
-    ]
+    ],
+    "tail_bits": {
+      "max_tail_bits": 10,
+      "max_tail_fraction": 0.05,
+      "jump_ratio": 5.0,
+      "slope_ratio": 5.0,
+      "min_gap_steps": 2,
+      "confirmation_points": 2
+    }
   }
 }

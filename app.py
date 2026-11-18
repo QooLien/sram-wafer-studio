@@ -85,7 +85,7 @@ def run_job(action, data):
                                           monitor_chips=correlation_chips(data.get("chips"), wafer) if kind == "monitor" else None)))
         else:
             full = action == "analyze"
-            config = Config.create(data["rows"], data.get("mode", "FBC0"), full=full)
+            config = Config.create(data["rows"], data.get("mode", "FBC0"), full=full, tail_bits=data.get("tail_bits"))
             paths = list(dict.fromkeys(Path(p).resolve() for p in data["paths"]))
             if not paths:
                 raise ValueError("Select ASC files first.")
@@ -258,6 +258,7 @@ class DesktopAPI:
                         "label": wafer.label, "chips": len(wafer.chips), "phases": len(wafer.phases),
                         "wt_numbers": wafer.wt_numbers,
                         "patterns": list(wafer.config.patterns), "mode": wafer.config.mode,
+                        "tail_bits": wafer.config.json()["tail_bits"],
                         "monitor_scopes": wafer.monitor_scopes,
                         "source_mode": wafer.source_mode, "manifest": wafer.manifest}
                 return result
@@ -280,7 +281,7 @@ class DesktopAPI:
                 key = data["profile"]
                 if key not in ("full", "batch"):
                     raise ValueError("Invalid configuration type.")
-                config = Config.create(data["rows"], data["mode"], full=key == "full")
+                config = Config.create(data["rows"], data["mode"], full=key == "full", tail_bits=data.get("tail_bits"))
                 with LOCK:
                     save_settings(key, config)
                 return config.json()

@@ -1,6 +1,7 @@
 """Read the existing Excel Config layout."""
 
-from engine import MODES
+from dataclasses import asdict
+from engine import MODES, TailBitSettings
 
 
 def workbook_config(path):
@@ -20,6 +21,12 @@ def workbook_config(path):
                 rows.append({"group": group, "tno": row[offset], "name": row[offset + 1],
                              "voltage": row[offset + 2], "cat": row[6] if group == "Function" and has_cat else None,
                              "stop": row[stop] if group == "Function" and stop is not None else ""})
-        return {"rows": rows, "mode": settings[0][9] if settings[0][9] in MODES else "FBC0"}
+        tail_bits = {}
+        if sheet.cell(1, 12).value == "Tail FBC0 setting":
+            for key, value in sheet.iter_rows(min_row=2, max_row=7, min_col=12, max_col=13, values_only=True):
+                if key is not None:
+                    tail_bits[key] = value
+        return {"rows": rows, "mode": settings[0][9] if settings[0][9] in MODES else "FBC0",
+                "tail_bits": asdict(TailBitSettings.create(tail_bits))}
     finally:
         book.close()
