@@ -463,7 +463,7 @@ async function refreshDistribution() {
   const before=summary.before_tail;
   const highest=before.blk==null?'Highest before Tail: —':
     'Highest before Tail: '+vminfmt(before)+' (BLK '+before.blk+')';
-  $('dist-judge').textContent=['WT'+wt,source,mode,highest,judge,'Tail BLKs: '+summary.tail.length].join(' · ');
+  $('dist-judge').textContent=['WT'+wt,source,mode,highest,judge,'Tail BLKs: '+summary.tail.length,'Observed fail samples: '+summary.tail_bound_count,'Returned from Tail: '+(summary.returned_from_tail.length?summary.returned_from_tail.join(', '):'None')].join(' · ');
   const note=$('dist-note');
   note.textContent=summary.reason??'';
   note.hidden=!summary.reason;
@@ -536,14 +536,14 @@ $('dist-view-matrix').onclick=()=>setDistributionView(false);
 $('dist-view-outliers').onclick=()=>setDistributionView(true);
 
 function vminBoxPlot(box,exact) {
-  if(!exact.length)return el('p','No exact FBC90% Vmin readings for this Chip, WT and scope.','correlation-note');
-  const bottom=Math.min(...exact.map(entry=>entry.fbc90_voltage));
-  const top=Math.max(box.upper_fence??bottom,...exact.map(entry=>entry.fbc90_voltage));
+  if(!exact.length)return el('p','No FBC90% Tail samples for this Chip, WT and scope.','correlation-note');
+  const bottom=Math.min(...exact.map(entry=>entry.tail_voltage));
+  const top=Math.max(box.upper_fence??bottom,...exact.map(entry=>entry.tail_voltage));
   const padding=Math.max(.004,(top-bottom)*.10);
   const base=bottom-padding, span=top+padding-base;
   const ticks=Array.from({length:5},(_,i)=>span*i/4);
-  const chart=chartFrame('FBC90% Vmin box plot','Vmin (V)',span,ticks,530,
-    offset=>Number((base+offset).toFixed(4)).toString(),335,'Exact FBC90% readings');
+  const chart=chartFrame('FBC90% Tail sample box plot','Sample voltage (V)',span,ticks,530,
+    offset=>Number((base+offset).toFixed(4)).toString(),335,'Exact Vmin / observed fail voltage');
   const y=v=>chart.y(v-base);
   const boxX=chart.left+(chart.right-chart.left)*.30;
   const pointsX=chart.left+(chart.right-chart.left)*.73;
@@ -559,10 +559,11 @@ function vminBoxPlot(box,exact) {
     fill:'#dfeafb',stroke:'#35638c','stroke-width':1.3});
   chart.add('line',{x1:boxX-34,x2:boxX+34,y1:y(box.median),y2:y(box.median),stroke:'#15685d','stroke-width':3});
   for(const entry of [...exact].sort((a,b)=>Number(a.tail)-Number(b.tail))){
-    const attrs={cx:pointsX+(entry.blk%13-6)*6,cy:y(entry.fbc90_voltage),
+    const attrs={cx:pointsX+(entry.blk%13-6)*6,cy:y(entry.tail_voltage),
       r:entry.tail?5:entry.steps_above_median!=null?4:2.8,fill:entry.tail?'#ad4d0d':entry.steps_above_median!=null?'#d89726':entry.below_fence?'#007b77':'#587c9f',
       'fill-opacity':entry.steps_above_median!=null||entry.below_fence?1:.48};
-    const title='BLK '+entry.blk+' · '+vfmt(entry.fbc90_voltage);
+    if(entry.fbc90_relation){attrs.stroke='#633da4';attrs['stroke-width']=2;}
+    const title='BLK '+entry.blk+' · Tail sample '+vfmt(entry.tail_voltage)+' · Reported '+vminfmt({relation:entry.fbc90_relation},entry.fbc90_voltage);
     const mark=chart.add('circle',attrs);
     chart.add('title',{},title,mark);
   }
@@ -570,19 +571,19 @@ function vminBoxPlot(box,exact) {
 }
 
 function renderVminOutliers(box,entries) {
-  const exact=entries.filter(e=>e.fbc90_voltage!=null&&!e.fbc90_relation);
+  const exact=entries.filter(e=>e.tail_voltage!=null);
   const count=box.count;
   const values=count?[['Q1',box.q1],['Median',box.median],['Q3',box.q3],['Upper fence',box.upper_fence]]:[];
-  const stats=el('p','Exact FBC90% readings: '+count+' / 256'+
+  const stats=el('p','Tail samples: '+count+' / 256 · Exact Vmin: '+box.exact_count+' · Observed fail voltage: '+box.bound_count+
     (values.length?' · '+values.map(([label,v])=>label+' '+vfmt(v)).join(' · '):''),'vmin-stats');
   const left=section('FBC90% Vmin Box Plot',vminBoxPlot(box,exact));
   const right=el('section',null,'detail-section vmin-location');
   right.append(el('h3','BLK Outlier Locations'));
-  const key=chartLegend(['Tail','Above upper fence only','Below lower fence','Exact Vmin','Other status'],['#cd641e','#ffd993','#b3dfde','#dce9f6','#edf0f3']);
+  const key=chartLegend(['Tail','Above upper fence only','Below lower fence','Tail sample','Other status'],['#cd641e','#ffd993','#b3dfde','#dce9f6','#edf0f3']);
   right.append(key);
   const board=el('div',null,'outlier-grid');
   for(const entry of entries){
-    const cls=entry.tail?'tail':entry.steps_above_median!=null?'high':entry.below_fence?'low':entry.fbc90_voltage!=null&&!entry.fbc90_relation?'exact':'other';
+    const cls=entry.tail?'tail':entry.steps_above_median!=null?'high':entry.below_fence?'low':entry.tail_voltage!=null?'exact':'other';
     const cell=el('button',String(entry.blk),'outlier-block '+cls);
     cell.type='button';
     cell.style.gridRow=entry.blk%16+1;
@@ -600,9 +601,10 @@ function renderVminOutliers(box,entries) {
   const grid=el('div',null,'vmin-stat-plots pattern-charts');
   grid.append(left,right);
   const notes=count<box.minimum_samples
-    ? 'At least '+box.minimum_samples+' exact Vmin readings are required to classify Tail BLKs.'
-    : 'Tail requires Vmin above the upper fence and at least '+box.minimum_steps+' tested voltage steps above the median.';
-  put('dist-outliers',stats,grid,el('p',notes+' Pass, missing and lower-bound values are excluded from quartiles. Purple outline marks the Judge BLK.','correlation-note'));
+    ? 'At least '+box.minimum_samples+' Tail samples are required to classify Tail BLKs.'
+    : 'Tail requires the sample voltage above the upper fence and at least '+box.minimum_steps+' tested voltage steps above the median.';
+  const comparison=el('p','Upper fence before observed fail samples: '+(box.exact_only_upper_fence==null?'—':vfmt(box.exact_only_upper_fence))+' · After: '+(box.upper_fence==null?'—':vfmt(box.upper_fence))+' · Returned from Tail: '+(box.returned_from_tail.length?box.returned_from_tail.map(b=>'BLK '+b).join(', '):'None'),'vmin-stats');
+  put('dist-outliers',stats,comparison,grid,el('p',notes+' Lower-bound readings use their actual crossing test voltage in quartiles; the reported bound is preserved. Pass and missing readings are excluded. Purple point outlines mark observed fail samples; purple BLK outlines mark the Judge.','correlation-note'));
 }
 
 

@@ -33,8 +33,8 @@
 - Fail BLK 取 Pattern 終點正值 FBC。Hard Fail、前序 WT Function fail 及同 WT 前序 Pattern 終點 fail 的 BLK 會排除。
 - Address Coverage 使用同 WT／Chip／BLK 在 Pattern 區間的 Address 聯集，並保留終點 FBC 和地址差。
 - FBC0 取首次正值 FBC 前一個電壓。FBC1～10 取首次達門檻的當站。FBC90% 取第一次達該 BLK 在 Pattern 內最高 FBC 的 90% 的站點。累積曲線按 Config 順序以截至當站的最高 FBC 除以整段峰值；電壓分布保留各站原始 FBC。
-- 依 Chip、WT、所選 Vmin scope 計算 Tail。至少四筆確定數值的 FBC90% BLK Vmin 才計算上下界。Pass、缺資料及 ≥ 下限不納入四分位數。高於 Q3 + 1.5 × IQR 且從 Median 往上跨至少兩個實際測試電壓階，才判定為 Tail。電壓階以去重後的測試電壓順序由低到高計算。
-- Scan／March 各使用自己的測試範圍。Merge 90% 使用兩段共用的峰值。Chip Vmin 的箱型圖對每個 BLK 取各合格 Pattern 的最高 FBC90% Vmin。兩個電壓階以該 BLK 觸發 Pattern 的電壓計算。Judge 仍使用選定的 FBC 模式。Wafer Map 和矩陣採用同一份 Tail 清單。矩陣並列排除 Tail 前的最高值與排除後的 Judge Vmin。
+- 依 Chip、WT、所選 Vmin scope 計算 Tail。至少四筆 FBC90% Tail 樣本才計算上下界。確定 Vmin 使用原值；最高測試電壓 Fail 而回報 ≥ Hard Fail 電壓的 BLK，使用實際 Fail 測試電壓（例如 1.035 V）參與統計，不把 ≥1.20 V 當成精確值。Pass、缺資料及無實際 Fail 電壓的下限不納入四分位數。高於 Q3 + 1.5 × IQR 且從 Median 往上跨至少兩個實際測試電壓階，才判定為 Tail。電壓階以去重後的測試電壓順序由低到高計算。
+- Scan／March 各使用自己的測試範圍。Merge 90% 使用兩段共用的峰值。Chip Vmin 的箱型圖對每個 BLK 取各合格 Pattern 的最高 FBC90% Vmin。兩個電壓階以該 BLK 觸發 Pattern 的電壓計算。Judge 仍使用選定的 FBC 模式。Wafer Map 和矩陣採用同一份 Tail 清單。矩陣並列排除 Tail 前的最高值與排除後的 Judge Vmin。箱型圖顯示加入實際 Fail 電壓樣本前後的上界及回到候選的 BLK；加入後仍符合 Tail 的 BLK 一併排除。
 - 「核對既有 VBA 結果」可讀取同一本舊 .xlsm 內的 Config、Fail Address、FBC by BLK 和 Import Index，驗證來源後重新核對。桌面視窗負責互動，輸出的 .xlsx 報表是靜態資料。
 
 ## W/R 相關性 Chip 選取

@@ -23,7 +23,9 @@ AUDIT_COLUMNS = {"wt": "WT", "pattern": "Pattern", "tno": "Stop TNO", "x": "X", 
                  "endpoint": "Endpoint Finding", "w": "Write only", "r": "Read only", "wr": "Write & Read",
                  "none": "No Monitor"}
 VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "relation": "Vmin relation", "blk": "BLK", "tno": "TNO", "func": "Func.",
-                "pattern": "Pattern", "cutoff": "Tail upper fence (V)", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
+                "pattern": "Pattern", "tail_sample_count": "Tail samples", "tail_bound_count": "Observed fail samples",
+                "exact_only_cutoff": "Upper fence before observed fail samples (V)", "returned_from_tail": "BLKs returned from Tail",
+                "cutoff": "Tail upper fence (V)", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
                 "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs", "test_voltage": "Crossing test voltage (V)",
                 "voltage_tno": "Go/No-Go voltage TNO", "voltage_rule": "Voltage rule"}
 

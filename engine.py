@@ -456,12 +456,28 @@ def vmin(scope, values, mode, *, hard_voltage=None):
     return Crossing(None, None, None, None, "No Data" if missing else ("Below" if peak else "Pass"))
 
 
-def voltage_distribution(readings, voltage_ladders):
-    """Box statistics for exact FBC90% Vmin and high-side Tail candidates."""
-    exact = {blk: crossing.voltage for blk, (_, crossing) in readings.items()
-             if crossing.voltage is not None and not crossing.relation}
+def tail_sample_voltage(crossing):
+    """Use exact Vmin or the observed fail voltage behind a lower bound."""
+    if not crossing.relation:
+        return crossing.voltage
+    return crossing.test_voltage if crossing.relation == ">=" else None
+
+
+def voltage_distribution(readings, voltage_ladders, compare=True):
+    """Tail samples include observed fail voltages, never a reported bound itself."""
+    exact = {blk: tail_sample_voltage(crossing) for blk, (_, crossing) in readings.items()
+             if tail_sample_voltage(crossing) is not None}
     values = sorted(exact.values())
-    stats = {"count": len(values), "minimum_samples": 4, "minimum_steps": 2}
+    ladders = {name: sorted({v for v in voltages if v is not None})
+               for name, voltages in voltage_ladders.items()}
+    exact_readings = {blk: hit for blk, hit in readings.items() if not hit[1].relation}
+    baseline, _, baseline_tail = (voltage_distribution(exact_readings, ladders, False)
+                                  if compare else ({}, {}, []))
+    stats = {"count": len(values), "minimum_samples": 4, "minimum_steps": 2,
+             "exact_count": sum(not readings[b][1].relation for b in exact),
+             "bound_count": sum(bool(readings[b][1].relation) for b in exact),
+             "exact_only_upper_fence": baseline.get("upper_fence"),
+             "exact_only_tail": baseline_tail, "returned_from_tail": [], "new_tail": []}
     if not values:
         return stats, {}, []
 
@@ -475,18 +491,24 @@ def voltage_distribution(readings, voltage_ladders):
         return stats, {}, []
     iqr = q3 - q1
     lower, upper = round(q1 - 1.5 * iqr, 12), round(q3 + 1.5 * iqr, 12)
-    ladders = {name: sorted({v for v in voltages if v is not None})
-               for name, voltages in voltage_ladders.items()}
     outliers = {}
     for blk, voltage in exact.items():
         if voltage > upper:
             ladder = ladders.get(readings[blk][0], ladders.get(None, ()))
             outliers[blk] = bisect_right(ladder, voltage) - bisect_right(ladder, median)
     tail = [blk for blk, steps in sorted(outliers.items()) if steps >= stats["minimum_steps"]]
-    stats.update(lower_fence=lower, upper_fence=upper,
+    stats.update(returned_from_tail=sorted(set(baseline_tail).difference(tail)),
+                 new_tail=sorted(set(tail).difference(baseline_tail)),
+                 lower_fence=lower, upper_fence=upper,
                  low=next(v for v in values if v >= lower),
                  high=next(v for v in reversed(values) if v <= upper))
     return stats, outliers, tail
+
+
+def tail_summary(stats):
+    return {"tail_sample_count": stats["count"], "tail_bound_count": stats["bound_count"],
+            "exact_only_cutoff": stats["exact_only_upper_fence"],
+            "returned_from_tail": stats["returned_from_tail"]}
 
 
 def select_vmin(readings, tail=()):
@@ -789,6 +811,7 @@ class Wafer:
                               "tail": tail, "hard": list(bits(hard)), "prior": past.bit_count(),
                               "remaining": len(kept), "incomplete": incomplete,
                               "before_tail": select_vmin(readings)}
+        summary.update(tail_summary(stats))
         return summary, readings, peaks, unknown, past, fbc90, stats, outliers
 
     @cached_property
@@ -905,10 +928,11 @@ class Wafer:
                 "tail": blk in tails, "judge": blk == summary["blk"],
                 "fbc90_voltage": voltage90[1].voltage if voltage90 else None,
                 "fbc90_relation": voltage90[1].relation if voltage90 else "",
+                "tail_voltage": tail_sample_voltage(voltage90[1]) if voltage90 else None,
                 "steps_above_median": outliers.get(blk),
-                "below_fence": bool(voltage90 and voltage90[1].voltage is not None
-                                    and not voltage90[1].relation and "lower_fence" in stats
-                                    and voltage90[1].voltage < stats["lower_fence"]),
+                "below_fence": bool(voltage90 and tail_sample_voltage(voltage90[1]) is not None
+                                    and "lower_fence" in stats
+                                    and tail_sample_voltage(voltage90[1]) < stats["lower_fence"]),
             })
         if with_matches and self.source_mode == "full":
             matches, _, _, _ = self.block_monitor_matches(wt, chip, self.monitor_patterns(scope))
@@ -991,6 +1015,7 @@ class Wafer:
                               "pattern": pattern, "cutoff": stats.get("upper_fence"), "tail": tail,
                               "hard": list(bits(hard)), "prior": past.bit_count(),
                               "remaining": len(kept), "incomplete": incomplete, "before_tail": before_tail}
+        summary.update(tail_summary(stats))
         return summary, readings, peaks, stats, outliers
 
     def merged_fbc90(self, wt, chip, blk):
