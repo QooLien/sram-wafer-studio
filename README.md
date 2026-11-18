@@ -40,3 +40,5 @@
 ## W/R 相關性 Chip 選取
 
 W/R 相關性頁面的 Wafer Map 支援左鍵選單顆、Shift＋左鍵增減多顆 Chip。顯示全部恢復整片，清除選取顯示空集合。散點、匹配統計及 Pearson r 會依選取重新計算；缺少必要資料的 Chip 保留在 Map／清單，但不計入相關係數。點散點或 Chip Breakdown 的「查看 Chip」可開啟座標、地址數與各 BLK 匹配分類，並進入 256 BLK matrix 或 BLK 明細。相同座標的重疊散點可從清單逐顆查看。切換 WT／Pattern 會重設選取。Export Excel 依目前 Chip 選取匯出全部 WT／Pattern。
+
+Stop Sign flow 尾端若回升電壓，達標項目改回溯到該 flow 最後的低電壓 Go/No-Go 項目。例如 0.765 V → 1.26 V，末項達 90% 時回報 0.765 V；連續回升項目同樣回溯，不跨 Stop Sign。原始達標 TNO、電壓與 FBC 保留，明細與匯出另列 Go/No-Go 來源。正常的最高掃描電壓 Fail 仍保留 ≥ Hard Fail 電壓規則。

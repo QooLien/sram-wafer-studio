@@ -398,6 +398,25 @@ class Crossing:
     status: str
     relation: str = ""
     test_voltage: float | None = None
+    voltage_tno: int | None = None
+    voltage_rule: str = ""
+
+
+def flow_voltage_references(scope):
+    """Map terminal recovery items to the last Go/No-Go minimum in their Stop Sign flow."""
+    references = {}
+    start = 0
+    for end, test in enumerate(scope):
+        if not test.stop and end != len(scope) - 1:
+            continue
+        segment = scope[start:end + 1]
+        if segment and all(item.voltage is not None for item in segment):
+            minimum = min(item.voltage for item in segment)
+            reference = max(i for i in range(start, end + 1) if scope[i].voltage == minimum)
+            for index in range(reference + 1, end + 1):
+                references[index] = reference
+        start = end + 1
+    return references
 
 
 def vmin(scope, values, mode, *, hard_voltage=None):
@@ -409,11 +428,13 @@ def vmin(scope, values, mode, *, hard_voltage=None):
         threshold = max(1, (9 * peak + 9) // 10)
     else:
         threshold = max(1, int(mode[3:]))
-    highest = max((test.voltage for test in scope if test.voltage is not None), default=None)
+    references = flow_voltage_references(scope)
+    highest = max((test.voltage for i, test in enumerate(scope)
+                   if i not in references and test.voltage is not None), default=None)
     voltage_complete = all(test.voltage is not None for test in scope)
     group = previous = None
     missing = False
-    for test, value in zip(scope, values):
+    for index, (test, value) in enumerate(zip(scope, values)):
         if test.voltage is None:
             group = previous = None
         elif group is None:
@@ -423,6 +444,10 @@ def vmin(scope, values, mode, *, hard_voltage=None):
         if value is None:
             missing = True
         elif value >= threshold:
+            if not missing and index in references:
+                reference = scope[references[index]]
+                return Crossing(test.tno, reference.voltage, test.name, value, "Fail", "", test.voltage,
+                                reference.tno, "terminal-recovery")
             if not missing and voltage_complete and hard_voltage is not None and test.voltage == highest:
                 return Crossing(test.tno, hard_voltage, test.name, value, "Fail", ">=", test.voltage)
             voltage = previous if mode == "FBC0" else test.voltage
@@ -473,7 +498,10 @@ def select_vmin(readings, tail=()):
     pattern, crossing = readings[blk] if blk is not None else (None, None)
     return {"blk": blk, "pattern": pattern, "voltage": crossing.voltage if crossing else None,
             "tno": crossing.tno if crossing else None, "func": crossing.func if crossing else None,
-            "relation": crossing.relation if crossing else ""}
+            "relation": crossing.relation if crossing else "",
+            "test_voltage": crossing.test_voltage if crossing else None,
+            "voltage_tno": crossing.voltage_tno if crossing else None,
+            "voltage_rule": crossing.voltage_rule if crossing else ""}
 
 
 def observed_category(write, read):

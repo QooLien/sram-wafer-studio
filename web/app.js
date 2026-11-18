@@ -285,6 +285,7 @@ function showChip(row) {
                 ['Read / Write',row.wr[0]+' / '+row.wr[1]],['RW / No Monitor',row.wr[2]+' / '+row.wr[3]]);
   }
   if(row.reason)fields.push(['判定說明',row.reason]);
+  if(row.voltage_rule==='terminal-recovery')fields.push(['判定說明',crossingReason(row)]);
   const details=el('dl');
   for(const [k,v] of fields){const line=el('div');line.append(el('dt',k),el('dd',v));details.append(line);}
   const link=el('button','查看 Chip 資料','secondary');
@@ -716,6 +717,7 @@ function chartMark(chart, tag, attrs, description) {
   return mark;
 }
 function crossingReason(result) {
+  if(result.voltage_rule==='terminal-recovery')return 'Stop Sign 尾端電壓回升，回溯 Go/No-Go TNO '+result.voltage_tno+'（'+vfmt(result.voltage)+'）；原始達標項目為 '+vfmt(result.test_voltage)+'。';
   const reasons={
     'Hard Fail':'此 BLK 已被 Hard Fail 排除。',
     'Prior WT':'此 BLK 已在前序 WT Fail，故排除。',
@@ -783,7 +785,7 @@ function accumulationChart(pattern, stations, result, segments=[]) {
     return article;
   }
   const info = result.tno === null ? 'All Pass · Peak FBC 0' :
-    'First crossing ≥90% · Vmin '+vminfmt(result)+' · '+result.func+' · TNO '+result.tno+(result.relation==='>='?' · Test '+vfmt(result.test_voltage):'');
+    'First crossing ≥90% · Vmin '+vminfmt(result)+' · '+result.func+' · TNO '+result.tno+(result.test_voltage!=null?' · Test '+vfmt(result.test_voltage):'')+(result.voltage_rule==='terminal-recovery'?' · Go/No-Go TNO '+result.voltage_tno:'');
   article.append(el('p',info,'chart-summary'));
   const grouped=segments.length>0;
   const rightMargin=Math.max(100,nfmt.format(result.peak).length*10+24);

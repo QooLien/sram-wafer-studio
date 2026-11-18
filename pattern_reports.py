@@ -23,6 +23,9 @@ def voltage_units(value):
 
 
 def judge_summary(judge):
+    if judge.get("voltage_rule") == "terminal-recovery":
+        return (f'Vmin {voltage_units(judge["voltage"])} | Go/No-Go TNO {judge["voltage_tno"]} | '
+                f'Crossing TNO {judge["tno"]} at {voltage_units(judge["test_voltage"])} (terminal recovery)')
     if judge.get("relation") == ">=":
         return (f'Vmin ≥ {voltage_units(judge["voltage"])} (Hard Fail voltage bound)  |  '
                 f'Test {voltage_units(judge["test_voltage"])}  |  TNO {judge["tno"]}')

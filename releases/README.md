@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.2.zip](SRAM%20Analysis%20Tool%20v1.8.2.zip)
+[下載 SRAM Analysis Tool v1.8.3.zip](SRAM%20Analysis%20Tool%20v1.8.3.zip)
 
-v1.8.2 在 W/R 相關性頁面加入可選取 Wafer Map，支援 Shift＋左鍵多選 Chip，依選取更新散點、匹配統計及 Pearson r。散點支援滑鼠與鍵盤開啟 Chip／BLK 匹配明細，並可進入 256 BLK matrix。Excel 匯出同步篩選 Chip，保留原有全部 WT／Pattern。Vmin、Tail 與地址計數規則不變。
+v1.8.3 修正 Stop Sign flow 尾端電壓回升的 Vmin：若達標 TNO 位於回升尾段，回溯使用最後的低電壓 Go/No-Go 項目。例如 0.765 V 後接 1.26 V 並在末項達 FBC90%，輸出 0.765 V，不誤判為 ≥ Hard Fail 電壓。適用 Scan、March、自訂 Stop Sign 及 Merge 內各 flow；保留達標 TNO、原始測試電壓、FBC 與回溯來源。
 
 保留版本：
 
+- [v1.8.2](SRAM%20Analysis%20Tool%20v1.8.2.zip)
 - [v1.8.1](SRAM%20Analysis%20Tool%20v1.8.1.zip)
 - [v1.8.0](SRAM%20Analysis%20Tool%20v1.8.0.zip)
 - [v1.7.16](SRAM%20Analysis%20Tool%20v1.7.16.zip)

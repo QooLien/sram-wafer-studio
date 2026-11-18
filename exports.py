@@ -24,7 +24,8 @@ AUDIT_COLUMNS = {"wt": "WT", "pattern": "Pattern", "tno": "Stop TNO", "x": "X", 
                  "none": "No Monitor"}
 VMIN_COLUMNS = {"status": "Status", "voltage": "Vmin (V)", "relation": "Vmin relation", "blk": "BLK", "tno": "TNO", "func": "Func.",
                 "pattern": "Pattern", "cutoff": "Tail upper fence (V)", "tail": "Tail BLKs", "hard": "Hard Fail BLKs",
-                "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs"}
+                "prior": "Prior WT excluded", "remaining": "Remaining BLKs", "incomplete": "Incomplete BLKs", "test_voltage": "Crossing test voltage (V)",
+                "voltage_tno": "Go/No-Go voltage TNO", "voltage_rule": "Voltage rule"}
 
 
 def test_headers(wafer, comparison=False):
