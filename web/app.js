@@ -1,10 +1,10 @@
 
 const $ = id => document.getElementById(id);
-const labels = {import:'匯入 ASC',maps:'Wafer Maps',data:'資料核對',correlation:'W/R 相關性',batch:'批次匯出',settings:'TNO 設定'};
-const layers = {fail:'Fail BLK Count',wr:'W&R 四宮格',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
+const labels = {import:'Import ASC',maps:'Wafer Maps',data:'Data Inspection',correlation:'W/R Correlation',batch:'Batch export',settings:'TNO Configuration'};
+const layers = {fail:'Fail BLK Count',wr:'W/R quadrants',loss:'Fail BLK / Loss',cat:'Cat Wafer Map',repair:'BL=0 Failure Analysis',vmin:'Chip Vmin Map'};
 const tables = {audit:'Missing BLK Address',address:'Fail Address',fbc:'BLK_FBC_Comparison',vmin:'Chip Vmin'};
 const s = {page:'import', files:[], batch:[], config:{}, mode:'FBC0', wt:1, pattern:'', layer:'fail', selected:null, vminJudge:null, block:null, blocks:[], mapStage:'wafer', detailPattern:null, detailChart:'fbc', viewPage:0, dataReturn:{page:'import',top:0}, targetAddress:null, demo:null, report:null, busy:false, last:null, versions:0, gridVersion:0, detailVersion:0, distributionVersion:0, distribution:null, correlationVersion:0, correlationSelection:null, correlationData:null, correlationDetailVersion:0, correlationContext:null};
-const nfmt = new Intl.NumberFormat('zh-TW');
+const nfmt = new Intl.NumberFormat('en-US');
 const vfmt = v => v == null ? '—' : Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6}) + ' V';
 const vminfmt = (result,value=result?.voltage) => (result?.relation==='>='&&value!=null?'≥ ':'')+vfmt(value);
 const chipKey = row => row.x + ',' + row.y;
@@ -43,7 +43,7 @@ function navigate(page) {
   if (s.page !== page) {
     if (page === 'data') {
       s.dataReturn={page:s.page,top:window.scrollY};
-      $('data-back').title='返回 '+labels[s.page];
+      $('data-back').title='Back to '+labels[s.page];
     }
     window.scrollTo(0,0);
   }
@@ -54,7 +54,7 @@ function navigate(page) {
     button.classList.toggle('selected', selected);
     button.setAttribute('aria-current', selected ? 'page' : 'false');
   });
-  $('breadcrumb').textContent = '工作區 / ' + labels[page];
+  $('breadcrumb').textContent = 'Workspace / ' + labels[page];
   if (page === 'maps' && s.report) return Promise.all([refreshMap(),refreshDistribution()]);
   if (page === 'data' && s.report) return refreshTable();
   if (page === 'correlation') return refreshCorrelation();
@@ -74,14 +74,14 @@ function renderFiles(batch=false) {
   const id = batch ? 'batch-files' : 'full-files';
   const container = $(id);
   container.classList.toggle('empty', !list.length);
-  $(batch ? 'batch-count' : 'file-count').textContent = list.length ? list.length + ' 份 ASC' : '尚未選取檔案';
-  if (!list.length) return put(id, el('span', '選擇一份或多份 .asc 檔案'));
+  $(batch ? 'batch-count' : 'file-count').textContent = list.length ? list.length + ' ASC files' : 'No files selected';
+  if (!list.length) return put(id, el('span', 'Select one or more .asc files'));
   put(id, ...list.map((path, i) => {
     const row = el('div', null, 'file-row');
     const name = path.split(/[\\/]/).pop();
     const description = el('div');
     description.append(el('span', name), el('br'), el('small', path));
-    const remove = el('button','移除','quiet'); remove.disabled = s.busy;
+    const remove = el('button','Remove','quiet'); remove.disabled = s.busy;
     remove.onclick = () => { list.splice(i,1); renderFiles(batch); };
     row.append(el('b','ASC','file-icon'), description, remove); return row;
   }));
@@ -101,8 +101,8 @@ async function selectAsc(batch) {
   if (!data.paths.length) return;
   if (batch) s.batch = [...new Set([...s.batch,...data.paths])];
   else {
-    if (data.paths.length > 3) throw new Error('完整版最多可選 3 份 ASC。');
-    s.files = data.paths; s.demo = null; $('full-profile').textContent = '使用完整版 TNO 設定';
+    if (data.paths.length > 3) throw new Error('Full analysis supports up to 3 ASC files.');
+    s.files = data.paths; s.demo = null; $('full-profile').textContent = 'Using the full-analysis TNO configuration';
   }
   renderFiles(batch);
 }
@@ -153,7 +153,7 @@ function setReport(report) {
   put('correlation-content');
   s.distribution=null;
   options($('pattern'),pats,s.pattern);
-  options($('data-pattern'),{'':'所有 Pattern',...pats},'');
+  options($('data-pattern'),{'':'All Patterns',...pats},'');
   options($('data-wt'),Object.fromEntries(report.wt_numbers.map(wt=>[wt,'WT'+wt])),s.wt);
   const mapLayers = {...layers}, available = {...tables};
   if(report.source_mode === 'address'){
@@ -173,14 +173,14 @@ function setReport(report) {
 function showPaths(output, warnings) {
   const block = el('section',null,'card paths');
   if (output.length) {
-    block.append(el('h2','已輸出 '+output.length+' 份檔案'));
+    block.append(el('h2','Created '+output.length+' files'));
     const list = el('ul');
     for(const path of output) list.append(el('li',path));
     block.append(list);
   }
   if(warnings.length) {
     const details = el('details'); details.open = true;
-    details.append(el('summary',warnings.length+' 則匯入診斷'));
+    details.append(el('summary',warnings.length+' import diagnostics'));
     for(const warning of warnings) details.append(el('p',warning));
     block.append(details);
   }
@@ -194,10 +194,10 @@ async function waitJob(kind) {
     if (result.working) { await new Promise(resolve=>setTimeout(resolve,350)); continue; }
     setBusy(false);
     if (kind === 'batch') put('batch-results',showPaths(result.output,result.warnings));
-    if (['export','pattern-export'].includes(kind) && result.output.length) notice('已匯出 '+result.output.join('\n'));
+    if (['export','pattern-export'].includes(kind) && result.output.length) notice('Exported '+result.output.join('\n'));
     if (['analyze','reopen'].includes(kind) && !result.error && result.data) {
       setReport(result.data);
-      if (result.warnings.length) notice('分析完成。'+result.warnings.length+' 則診斷可在「匯入資訊」查看。');
+      if (result.warnings.length) notice('Analysis complete. '+result.warnings.length+' diagnostics are available in Import Info.');
       await navigate(kind === 'reopen' || result.data.source_mode === 'address' ? 'data' : 'maps');
     }
     break;
@@ -211,15 +211,15 @@ $('pick-full').onclick = safe(()=>selectAsc(false));
 $('pick-batch').onclick = safe(()=>selectAsc(true));
 $('demo').onclick = safe(async ()=>{
   const demo = await api('demo',{mode:s.mode}); s.files = demo.paths; s.demo = demo.config;
-  $('full-profile').textContent = '使用 128 芯片範例的 TNO 設定'; renderFiles();
+  $('full-profile').textContent = 'Using the 128-Chip demo TNO configuration'; renderFiles();
 });
 $('vmin-mode').onchange = () => {s.mode = $('vmin-mode').value;};
 $('run-full').onclick = safe(()=>{
-  if(!s.files.length) throw new Error('請先選擇 ASC，或載入 128 芯片範例。');
+  if(!s.files.length) throw new Error('Select ASC files or load the 128-Chip demo first.');
   return run('analyze',{paths:s.files, rows:(s.demo || s.config.full).rows, mode:s.mode, source_mode:$('source-mode').value});
 });
 $('run-batch').onclick = safe(()=>{
-  if(!s.batch.length) throw new Error('請先選擇 ASC。');
+  if(!s.batch.length) throw new Error('Select ASC files first.');
   return run('batch',{paths:s.batch, rows:s.config.batch.rows, mode:s.config.batch.mode});
 });
 
@@ -267,28 +267,28 @@ function renderLegend(id, pairs) {
 }
 function showKpis(rows) {
   const current = s.report.manifest.find(phase => phase.wt === s.wt);
-  const items = [[s.report.label,'Lot / Wafer'],[nfmt.format(rows.length),'Chip'],[nfmt.format(current.fbc),'FBC 紀錄'],
+  const items = [[s.report.label,'Lot / Wafer'],[nfmt.format(rows.length),'Chip'],[nfmt.format(current.fbc),'FBC records'],
                  [nfmt.format(current.address),'WT'+s.wt+' Address']];
   put('kpis',...items.map(([value,key])=>{
     const box=el('div',null,'card kpi');box.append(el('span',key),el('b',value));return box;
   }));
 }
 function showChip(row) {
-  if(!row) return put('chip-summary',el('h2','Chip 明細'),el('p','從 Wafer Map 點選一顆 Chip。'));
-  const fields=[['WT','WT'+s.wt],['狀態',row.status]];
+  if(!row) return put('chip-summary',el('h2','Chip Details'),el('p','Select a Chip on the Wafer Map.'));
+  const fields=[['WT','WT'+s.wt],['Status',row.status]];
   if(s.layer === 'vmin'){
-    fields.push(['判定來源',s.vminJudge?.source??'Chip Vmin'],['Vmin',vminfmt(row,row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
-      ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail 上界',row.cutoff==null?'—':vfmt(row.cutoff)],['包含 Tail 的最高 Vmin',vminfmt(row.before_tail)],
-      ['剩餘／資料不足',row.remaining+'／'+row.incomplete]);
+    fields.push(['Judgment scope',s.vminJudge?.source??'Chip Vmin'],['Vmin',vminfmt(row,row.value)],['Judge BLK',row.blk ?? '—'],['TNO',row.tno ?? '—'],['Func.',row.func ?? '—'],
+      ['Hard Fail',row.hard.length],['Tail BLK',row.tail.length],['Tail upper fence',row.cutoff==null?'—':vfmt(row.cutoff)],['Highest Vmin before Tail exclusion',vminfmt(row.before_tail)],
+      ['Remaining / Incomplete',row.remaining+'／'+row.incomplete]);
   } else if(row.wr){
     fields.push(['Fail BLK',row.value ?? '—'],['Loss BLK',row.loss],
                 ['Read / Write',row.wr[0]+' / '+row.wr[1]],['RW / No Monitor',row.wr[2]+' / '+row.wr[3]]);
   }
-  if(row.reason)fields.push(['判定說明',row.reason]);
-  if(row.voltage_rule==='terminal-recovery')fields.push(['判定說明',crossingReason(row)]);
+  if(row.reason)fields.push(['Judgment reason',row.reason]);
+  if(row.voltage_rule==='terminal-recovery')fields.push(['Judgment reason',crossingReason(row)]);
   const details=el('dl');
   for(const [k,v] of fields){const line=el('div');line.append(el('dt',k),el('dd',v));details.append(line);}
-  const link=el('button','查看 Chip 資料','secondary');
+  const link=el('button','View Chip data','secondary');
   link.onclick=safe(()=>{$('filter-chip').checked=true;s.viewPage=0;return navigate('data');});
   const title=el('h2','X'+row.x+' · Y'+row.y);
   put('chip-summary',title,details,link);
@@ -332,7 +332,7 @@ async function refreshMap() {
   const x0=Math.min(...rows.map(r=>r.x)), x1=Math.max(...rows.map(r=>r.x));
   const y0=Math.min(...rows.map(r=>r.y)), y1=Math.max(...rows.map(r=>r.y));
   const nx=x1-x0+1,ny=y1-y0+1;
-  if(Math.max(nx,ny)>100) throw new Error('Wafer Map 座標範圍超過 100。');
+  if(Math.max(nx,ny)>100) throw new Error('Wafer Map coordinate range exceeds 100.');
   const board=$('wafer-grid');board.replaceChildren();
   const dualPatterns=s.layer==='vmin'
     ? s.report.patterns.filter(name=>['scan','march'].includes(name.toLowerCase())) : [];
@@ -667,7 +667,7 @@ function table(headers, rows) {
   const table=el('table'), head=el('thead'), body=el('tbody'), bar=el('tr');
   for(const header of headers)bar.append(el('th',header));
   head.append(bar);table.append(head,body);
-  if(!rows.length){const row=el('tr'),msg=el('td','沒有符合條件的資料','tab-note');msg.colSpan=headers.length;row.append(msg);body.append(row);}
+  if(!rows.length){const row=el('tr'),msg=el('td','No matching data','tab-note');msg.colSpan=headers.length;row.append(msg);body.append(row);}
   for(const values of rows){
     const row=el('tr');for(const value of values)row.append(value instanceof Node ? value : el('td',Array.isArray(value)?value.join(', '):value??'—'));body.append(row);
   }
@@ -717,20 +717,20 @@ function chartMark(chart, tag, attrs, description) {
   return mark;
 }
 function crossingReason(result) {
-  if(result.voltage_rule==='terminal-recovery')return 'Stop Sign 尾端電壓回升，回溯 Go/No-Go TNO '+result.voltage_tno+'（'+vfmt(result.voltage)+'）；原始達標項目為 '+vfmt(result.test_voltage)+'。';
+  if(result.voltage_rule==='terminal-recovery')return 'Terminal recovery voltage; using Go/No-Go TNO '+result.voltage_tno+' ('+vfmt(result.voltage)+'); original crossing voltage: '+vfmt(result.test_voltage)+'.';
   const reasons={
-    'Hard Fail':'此 BLK 已被 Hard Fail 排除。',
-    'Prior WT':'此 BLK 已在前序 WT Fail，故排除。',
-    'Prior Pattern':'此 BLK 已在同 WT 的前序 Pattern Fail，故排除。',
-    'No Data':'必要的 FBC／前序測試資料缺失或格式錯誤。',
-    'Pass':'完整 FBC 皆為 0，未觸發 Vmin。',
-    'Below':'尚未達到所選 FBC 門檻。'
+    'Hard Fail':'This BLK is excluded by Hard Fail.',
+    'Prior WT':'This BLK failed at a previous WT and is excluded.',
+    'Prior Pattern':'This BLK failed an earlier Pattern in this WT and is excluded.',
+    'No Data':'Required FBC or prerequisite test data is missing or invalid.',
+    'Pass':'Complete FBC data is all zero; no Vmin crossing.',
+    'Below':'The selected FBC threshold has not been reached.'
   };
-  if(result.relation==='>=')return '最高測試電壓已 Fail；Vmin 下限採用 Config 的 Hard Fail 電壓，非精確量測值。';
+  if(result.relation==='>=')return 'The highest test voltage failed. Vmin is a lower bound at the configured Hard Fail voltage, not an exact measurement.';
   if(result.status==='No Vmin')return s.report.mode==='FBC0'
-    ? 'FBC0 找不到首筆 Fail 之前的電壓組：首個電壓組已 Fail，或前站未設定電壓。'
-    : '達門檻的 TNO 未設定測試電壓。';
-  return reasons[result.status]??('依 '+s.report.mode+' 門檻判定。');
+    ? 'FBC0 has no voltage group before the first failure: the first group failed or the preceding voltage is not configured.'
+    : 'The crossing TNO has no configured test voltage.';
+  return reasons[result.status]??('Using '+s.report.mode+' threshold.');
 }
 function stationLabel(station) {
   const fbc = station.fbc === null ? 'No FBC data' : 'FBC '+nfmt.format(station.fbc);
@@ -857,7 +857,7 @@ function monitorScatter(rows, side, label) {
   for(const row of points){
     const title='X'+row.x+' Y'+row.y+' · '+label+' '+row[side]+' · Function '+row.function;
     const point=chartMark(chart,'circle',{cx:x(row[side]),cy:chart.y(row.function),r:5,
-      role:'button',class:'correlation-point','data-chip':chipKey(row),fill:side==='write'?'#ad600b':'#2465a5','fill-opacity':0.8},title+' · 點選查看 Chip 明細');
+      role:'button',class:'correlation-point','data-chip':chipKey(row),fill:side==='write'?'#ad600b':'#2465a5','fill-opacity':0.8},title+' · Select to view Chip details');
     point.onclick=safe(()=>openCorrelationChip(row));
     point.onkeydown=safe(event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();return openCorrelationChip(row);}});
   }
@@ -868,18 +868,19 @@ async function openCorrelationChip(row) {
   const token=++s.correlationDetailVersion;
   const wt=$('correlation-wt').value,scope=$('correlation-scope').value;
   $('modal-title').textContent='WT'+wt+' · X'+row.x+' Y'+row.y+' · W/R correlation';
-  const summary=table(['項目','數量／狀態'],[
+  const summary=table(['Item','Count / Status'],[
+    ['Monitor category',monitorCategories[monitorCategory(row)].label],
     ['Function FBC coverage',row.complete?'Complete':'Incomplete'],['Function captured addresses',row.function],
     ['W-Low captured addresses',row.write??'No Data'],['R-Low captured addresses',row.read??'No Data'],
     ['Eligible Fail BLKs',row.fail_blks??'No Data'],['BLKs with Function addresses',row.address_blks],
     ...s.correlationData.labels.map((label,i)=>[label,row.counts[i]])]);
-  put('modal-content',summary,el('p','載入 BLK 匹配明細…','correlation-note'));
+  put('modal-content',summary,el('p','Loading BLK match details…','correlation-note'));
   if(!$('modal').open)$('modal').showModal();
   const detail=await api(params({view:'vmin_distribution',wt,scope,x:row.x,y:row.y,matches:'1'}));
   if(token!==s.correlationDetailVersion||!$('modal').open)return;
   const entries=detail.entries.filter(entry=>entry.matches?.some(Boolean));
   const actions=el('div',null,'actions');
-  const matrix=el('button','開啟 256 BLK matrix','secondary');
+  const matrix=el('button','Open 256-BLK matrix','secondary');
   const jump=async blk=>{
     $('modal').close();s.wt=Number(wt);s.selected=chipKey(row);s.pattern=scope.startsWith('pattern:')?scope.slice(8):s.report.patterns[0];
     s.layer='fail';s.block=null;s.blocks=[];s.mapStage='matrix';s.detailPattern=s.pattern;
@@ -888,36 +889,50 @@ async function openCorrelationChip(row) {
     if(blk!=null){s.block=blk;await refreshDetail();setMapStage('detail',true);}
   };
   matrix.onclick=safe(()=>jump(null));actions.append(matrix);
-  const blocks=table(['BLK','Function matched addresses',...s.correlationData.labels,'明細'],entries.map(entry=>{
-    const cell=el('td'),button=el('button','查看 BLK','quiet');button.onclick=safe(()=>jump(entry.blk));cell.append(button);
+  const blocks=table(['BLK','Function matched addresses',...s.correlationData.labels,'Details'],entries.map(entry=>{
+    const cell=el('td'),button=el('button','View BLK','quiet');button.onclick=safe(()=>jump(entry.blk));cell.append(button);
     return [entry.blk,entry.matches.reduce((a,b)=>a+b,0),...entry.matches,cell];
   }));
-  put('modal-content',summary,el('p','X 軸是整顆 Chip 的 monitor 擷取地址；Y 軸是所選範圍有效 BLK 的 Function 擷取地址，皆不是完整 FBC。','correlation-note'),actions,section('BLK matching breakdown',blocks));
+  put('modal-content',summary,el('p','X uses monitor addresses captured across the Chip; Y uses Function addresses in eligible BLKs of the selected scope. Neither is complete FBC.','correlation-note'),actions,section('BLK matching breakdown',blocks));
+}
+const monitorCategories = {
+  write: {label:'W worse',symbol:'W',color:'#f6c58b'},
+  read: {label:'R worse',symbol:'R',color:'#bad6f6'},
+  equal: {label:'W = R',symbol:'=',color:'#dfc8ef'},
+  zero: {label:'No captured W/R fails',symbol:'0',color:'#cbe9d4'},
+  missing: {label:'No data',symbol:'?',color:'#d8dee7'}
+};
+function monitorCategory(row) {
+  if(!row.complete||row.write==null||row.read==null)return 'missing';
+  if(row.write===0&&row.read===0)return 'zero';
+  return row.write>row.read?'write':row.read>row.write?'read':'equal';
 }
 function correlationMap() {
   const rows=s.correlationData.rows, selected=s.correlationSelection;
   const box=el('section',null,'card correlation-selection');
-  box.append(el('h2','Wafer Map · Chip 選取'),el('p','左鍵：選單顆；Shift＋左鍵：增減 Chip。顯示全部與未選任何 Chip 為不同狀態。','correlation-note'));
+  box.append(el('h2','Wafer Map · Chip Selection'),el('p','Click to select one Chip; Shift-click to add or remove Chips. Show all and an empty selection are distinct.','correlation-note'));
   const controls=el('div',null,'toolbar');
-  for(const [label,value] of [['顯示全部',null],['清除選取',[]]]){
+  for(const [label,value] of [['Show all',null],['Clear selection',[]]]){
     const button=el('button',label,'secondary');button.onclick=safe(()=>{s.correlationSelection=value;return updateCorrelationSelection();});controls.append(button);
   }
-  controls.append(el('span',selected===null?'全部 '+rows.length+' 顆 Chip':'已選 '+selected.length+' / '+rows.length+' 顆 Chip','correlation-selection-count'));
+  controls.append(el('span',selected===null?'All '+rows.length+' Chips':'Selected '+selected.length+' / '+rows.length+' Chips','correlation-selection-count'));
   box.append(controls);
   if(!rows.length)return box;
   const xs=rows.map(r=>r.x),ys=rows.map(r=>r.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
-  if(x1-x0>99||y1-y0>99){box.append(el('p','座標範圍超過 100，無法繪製此 Wafer Map。','correlation-note'));return box;}
+  if(x1-x0>99||y1-y0>99){box.append(el('p','Coordinate range exceeds 100; this Wafer Map cannot be drawn.','correlation-note'));return box;}
   const scroll=el('div',null,'correlation-wafer-scroll'),board=el('div',null,'correlation-wafer');
   board.style.gridTemplateColumns='36px repeat('+(x1-x0+1)+',minmax(34px,1fr))';
   const axis=(text,col,line)=>{const a=el('span',text,'axis');a.style.gridColumn=col;a.style.gridRow=line;board.append(a);};
   axis('Y/X',1,1);for(let x=x0;x<=x1;x++)axis(x,x-x0+2,1);for(let y=y0;y<=y1;y++)axis(y,1,y-y0+2);
   for(const row of rows){
     const key=chipKey(row),active=selected===null||selected.includes(key);
-    const button=el('button',row.complete?(row.function?'●':'0'):'?','correlation-chip');
+    const category=monitorCategory(row), info=monitorCategories[category];
+    const button=el('button',info.symbol,'correlation-chip');
+    button.dataset.category=category;button.style.setProperty('--correlation-chip-color',info.color);
     button.dataset.chip=key;button.dataset.selected=String(active);button.setAttribute('aria-pressed',active);
     button.style.gridColumn=row.x-x0+2;button.style.gridRow=row.y-y0+2;
     button.classList.toggle('incomplete',!row.complete);
-    button.title='X'+row.x+' Y'+row.y+' · Function '+row.function+' · W '+(row.write??'No Data')+' · R '+(row.read??'No Data');
+    button.title='X'+row.x+' Y'+row.y+' · '+info.label+' · Function '+row.function+' · W '+(row.write??'No Data')+' · R '+(row.read??'No Data');
     button.setAttribute('aria-label',button.title);
     button.onclick=safe(event=>{
       const keys=new Set(event.shiftKey?(s.correlationSelection??[]):[]);
@@ -925,7 +940,8 @@ function correlationMap() {
       s.correlationSelection=[...keys];return updateCorrelationSelection();
     });board.append(button);
   }
-  scroll.append(board);box.append(scroll,el('p','● 有 Function 擷取地址；0 無 Function 擷取地址；? FBC coverage 不完整。框線代表已選取。','correlation-note'));
+  const legend=chartLegend(Object.values(monitorCategories).map(info=>info.label),Object.values(monitorCategories).map(info=>info.color));
+  scroll.append(board);box.append(scroll,legend,el('p','W/R worse compares captured monitor Fail Address counts, not physical failure severity or complete FBC. No data means incomplete Function coverage or missing W/R monitor data. Borders indicate selected Chips.','correlation-note'));
   return box;
 }
 async function refreshCorrelation() {
@@ -968,8 +984,8 @@ function renderCorrelation(data) {
     charts.append(panel);
   }
   const note=el('p','X: captured W/R addresses across each Chip. Y: captured Function addresses in eligible BLKs for the selected scope. Addresses are deduplicated by WT / Chip / BLK / WL / BL / IO. Pearson r uses selected Chips with complete Function FBC and observed monitor data.','correlation-note');
-  const details=section('Chip Breakdown',table(['X','Y','Function FBC coverage','Fail BLKs','BLKs with Address','Function Addresses',...data.labels,'W-Low Addresses','R-Low Addresses','明細'],
-    data.rows.map(row=>{const cell=el('td'),button=el('button','查看 Chip','quiet');button.onclick=safe(()=>openCorrelationChip(row));cell.append(button);
+  const details=section('Chip Breakdown',table(['X','Y','Function FBC coverage','Fail BLKs','BLKs with Address','Function Addresses',...data.labels,'W-Low Addresses','R-Low Addresses','Details'],
+    data.rows.map(row=>{const cell=el('td'),button=el('button','View Chip','quiet');button.onclick=safe(()=>openCorrelationChip(row));cell.append(button);
       return [row.x,row.y,row.complete?'Complete':'Incomplete',row.fail_blks??'—',row.address_blks,row.function,...row.counts,row.write??'—',row.read??'—',cell];})));
   put('correlation-content',correlationMap(),overview,charts,note,details);
 }
@@ -993,7 +1009,7 @@ function combinedAccumulation(details) {
   });
   const result={...(details.merged_fbc90??{status:'No Data',tno:null}),peak};
   const article=accumulationChart('Merge 90%',stations,result,segments);
-  article.append(el('p','Merge 90%：依 Config 順序合併 Scan／March，共用 Peak FBC 作為 100%，曲線使用截至當站的最大 FBC。','chart-note'));
+  article.append(el('p','Merge 90% combines Scan/March in Config order with a shared Peak FBC as 100%. The curve uses the running maximum FBC.','chart-note'));
   return article;
 }
 
@@ -1107,7 +1123,7 @@ function patternCharts(details, initialPattern, showTables) {
   exportStatus.setAttribute('role','status');
   exportStatus.hidden = true;
   const actions = el('div',null,'actions pattern-export-actions');
-  for (const [kind,text] of [['charts','匯出 PDF／PNG'],['excel','匯出 Excel']]) {
+  for (const [kind,text] of [['charts','Export PDF/PNG'],['excel','Export Excel']]) {
     const button = el('button',text,'secondary');
     button.dataset.patternExport = kind;
     button.disabled = s.busy;
@@ -1116,7 +1132,7 @@ function patternCharts(details, initialPattern, showTables) {
       const {paths} = await api('pick',{kind:'folder'});
       if (!paths.length) return;
       exportStatus.hidden = false;
-      exportStatus.textContent = '正在匯出 '+scope.pattern+'…';
+      exportStatus.textContent = 'Exporting '+scope.pattern+'…';
       try {
         await run('pattern-export',{...scope,folder:paths[0]});
         exportStatus.textContent = s.last.error || s.last.output.join('\n');
@@ -1180,14 +1196,14 @@ async function refreshDetail(fromMatrix=false) {
   }
   const sweepData=el('div');
   const addressData=el('div');
-  const sweep=section('Function sweep（Config 順序）',sweepData,true);
-  const address=section('Fail Address / Monitor 匹配',addressData,true);
+  const sweep=section('Function sweep (Config order)',sweepData,true);
+  const address=section('Fail Address / Monitor matching',addressData,true);
   sweep.open=Boolean(march);
   const showTables=(pattern,stations)=>{
-    sweepData.replaceChildren(table(['Pattern','TNO','Func.','Test Voltage','FBC','狀態'],
+    sweepData.replaceChildren(table(['Pattern','TNO','Func.','Test Voltage','FBC','Status'],
       details.sweep.map(r=>[r.pattern,r.tno,r.func,vfmt(r.v),r.fbc,r.state])));
     const addresses=details.addresses.map(r=>{
-      const cell=el('td'), btn=el('button','查看地址','quiet');
+      const cell=el('td'), btn=el('button','View address','quiet');
       btn.onclick=safe(()=>{
         $('data-view').value='address';$('filter-chip').checked=true;
         s.targetAddress=r.address.join(',');s.viewPage=0;return navigate('data');
@@ -1197,7 +1213,7 @@ async function refreshDetail(fromMatrix=false) {
       voltage.title='Function TNO '+r.function.join(', ');
       return [r.pattern,...r.address,voltage,r.write,r.read,r.category,cell];
     });
-    addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','分類','來源'],addresses));
+    addressData.replaceChildren(table(['Pattern','BLK','WL','BL','IO','Function Voltage','Write TNO','Read TNO','Classification','Source'],addresses));
   };
   const combined=combinedAccumulation(details);
   if(combined){
@@ -1214,9 +1230,9 @@ async function refreshDetail(fromMatrix=false) {
     for(const name of Object.keys(details.fbc90))body.append(patternCharts(details,name,showTables));
   }
   const block=s.blocks[s.block];
-  if(block)body.append(section('各 WT 狀態與 W/R 匹配',table(['WT','狀態','Write','Read'],
+  if(block)body.append(section('WT status and W/R matching',table(['WT','Status','Write','Read'],
     block.states.map(phase=>['WT'+phase.wt,phase.status,phase.w,phase.r])),true));
-  body.append(section('Vmin 判定',table(['Pattern','狀態','TNO','Func.','Vmin','峰值 FBC','判定說明'],
+  body.append(section('Vmin judgment',table(['Pattern','Status','TNO','Func.','Vmin','Peak FBC','Judgment reason'],
     details.crossings.map(c=>[c.pattern,c.status,c.tno,c.func,c.voltage==null?c.status:vminfmt(c),c.peak,crossingReason(c)])),true));
   body.append(sweep,address);
   put('block-detail',title,body);setMapStage(s.mapStage);
@@ -1289,7 +1305,7 @@ async function refreshTable() {
   put('data-table',rendered);
   viewport.scrollTop=0;
   $('prev').disabled=s.viewPage===0;$('next').disabled=!result.more;
-  $('page-no').textContent='第 '+(s.viewPage+1)+' 頁';
+  $('page-no').textContent='Page '+(s.viewPage+1)+'';
   fitDataTable();
   if(result.highlighted!==null){
     const row=rendered.tBodies[0].rows[result.highlighted];
@@ -1307,30 +1323,30 @@ function modal(title, node) {
 $('close-modal').onclick=()=>$('modal').close();
 $('open-import').onclick=safe(async()=>{
   const data=await api('status'), block=el('div');
-  if(!data.data&&!data.output.length&&!data.warnings.length)block.append(el('p','目前沒有匯入記錄。'));
-  if(data.data)block.append(section(data.data.label,table(['WT','STEP','版本','Chip','FBC','Address','忽略的 Address','重複 FBC','來源'],
+  if(!data.data&&!data.output.length&&!data.warnings.length)block.append(el('p','No import records available.'));
+  if(data.data)block.append(section(data.data.label,table(['WT','STEP','Version','Chip','FBC','Address','Ignored addresses','Duplicate FBC','Source'],
     data.data.manifest.map(r=>['WT'+r.wt,r.step,r.version,r.chips,r.fbc,r.address,r.invalid,r.duplicates,r.path]))));
   if(data.output.length||data.warnings.length)block.append(showPaths(data.output,data.warnings));
-  modal('匯入資訊',block);
+  modal('Import Info',block);
 });
 $('open-export').onclick=safe(()=>{
-  if(!s.report)throw new Error('請先匯入 ASC。');
+  if(!s.report)throw new Error('Import ASC files first.');
   const block=el('div',null,'modal-files');
-  block.append(el('p','預設存回第一份 ASC 的資料夾。'));
-  if (s.selected) block.append(el('p','完整 Excel 的 BLK 矩陣使用 X'+selection().x+' Y'+selection().y+'。'));
+  block.append(el('p','The default output folder is the first ASC source folder.'));
+  if (s.selected) block.append(el('p','The full Excel BLK matrix uses X'+selection().x+' Y'+selection().y+'.'));
   let folder='';
-  const path=el('p','使用 ASC 來源資料夾','modal-path');
-  const picker=el('button','選擇匯出資料夾','secondary');
+  const path=el('p','Use the ASC source folder','modal-path');
+  const picker=el('button','Select output folder','secondary');
   picker.onclick=safe(async()=>{const data=await api('pick',{kind:'folder'});if(data.paths.length){folder=data.paths[0];path.textContent=folder;}});
   block.append(picker,path);
-  const modes={full:'完整 Excel 報表（原版版面）',address:'Fail Address Excel',fbc:'FBC Excel',cat:'Cat Map Excel',ppt:'Wafer Maps PowerPoint · 37 cm'};
+  const modes={full:'Full Excel report (original layout)',address:'Fail Address Excel',fbc:'FBC Excel',cat:'Cat Map Excel',ppt:'Wafer Maps PowerPoint · 37 cm'};
   for(const [kind,label] of Object.entries(modes)){
     if(s.report.source_mode!=='full' && ![s.report.source_mode,'cat'].includes(kind))continue;
     const button=el('button',label,'secondary');
     button.onclick=safe(()=>{$('modal').close();return run('export',{kind,folder,chip:s.selected?.split(',')});});
     block.append(button);
   }
-  modal('匯出報表',block);
+  modal('Export Report',block);
 });
 function profile() {return $('profile').value;}
 function renderSettings() {
@@ -1338,7 +1354,7 @@ function renderSettings() {
   const full=profile()==='full', header=el('tr');
   const fields=[['tno','TNO'],['name','Func.'],['voltage','Voltage (V)'],['cat','Fail Cat.']];
   if(full)fields.push(['stop','Stop Sign']);
-  for(const title of ['Group',...fields.map(f=>f[1]),'列操作'])header.append(el('th',title));
+  for(const title of ['Group',...fields.map(f=>f[1]),'Row actions'])header.append(el('th',title));
   put('config-head',header);
   put('config-rows',...current.rows.map((obj,i)=>{
     const row=el('tr'), group=el('td'), select=el('select');
@@ -1351,7 +1367,7 @@ function renderSettings() {
       input.oninput=()=>{obj[key]=input.value;};cell.append(input);row.append(cell);
     }
     const actions=el('td'), moves=el('div',null,'moves');
-    for(const [icon,offset,name] of [['↑',-1,'上移'],['↓',1,'下移'],['✕',0,'移除']]){
+    for(const [icon,offset,name] of [['↑',-1,'Move up'],['↓',1,'Move down'],['✕',0,'Remove']]){
       const button=el('button',icon,offset?'quiet':'quiet remove');button.setAttribute('aria-label',name+' '+(i+1));
       button.disabled=offset!==0&&(i+offset<0||i+offset>=current.rows.length);
       button.onclick=()=>{
@@ -1367,12 +1383,12 @@ $('profile').onchange=renderSettings;
 $('add-row').onclick=()=>{s.config[profile()].rows.push({group:'Function',tno:'',name:'',voltage:'',cat:'',stop:''});renderSettings();$('config-rows').lastChild?.scrollIntoView({block:'nearest'});};
 $('pick-config').onclick=safe(async()=>{
   const result=await api('pick',{kind:'settings'});
-  if(result.config){s.config[profile()]=result.config;renderSettings();notice('已載入 '+result.paths[0].split(/[\\/]/).pop()+'，可編輯後儲存。');}
+  if(result.config){s.config[profile()]=result.config;renderSettings();notice('Loaded '+result.paths[0].split(/[\\/]/).pop()+'. Edit and save as needed.');}
 });
 $('save-config').onclick=safe(async()=>{
   const key=profile(), data=s.config[key];
   s.config[key]=await api('save-settings',{profile:key,rows:data.rows,mode:key==='full'?s.mode:data.mode});
-  renderSettings();notice('已儲存 '+(key==='full'?'完整版':'批次匯出')+'設定。');
+  renderSettings();notice('Saved '+(key==='full'?'Full analysis':'Batch export')+' configuration.');
 });
 const initialize = safe(async () => {
   const settings=await api('settings');s.config=settings.settings;s.mode=s.config.full.mode;modes();

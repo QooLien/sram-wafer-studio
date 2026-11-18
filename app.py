@@ -50,7 +50,7 @@ def run_job(action, data):
     try:
         if action == "reopen":
             wafer, warnings = read_existing(Path(data["path"]), progress)
-            progress("重新核對 Excel 的 Address 與 FBC")
+            progress("Rechecking Excel Address and FBC data")
             wafer.map_stats
         elif action == "pattern-export":
             wafer = data["wafer"]
@@ -60,25 +60,25 @@ def run_job(action, data):
             blk = int(data["blk"])
             pattern = data["pattern"]
             if wafer.source_mode == "address" or chip not in wafer.chips or not 0 <= blk < 256:
-                raise ValueError("請選取具有 FBC 的 Chip 與 BLK。")
+                raise ValueError("Select a Chip and BLK with FBC data.")
             if pattern not in wafer.config.patterns:
-                raise ValueError("請選取可用的 Pattern。")
-            progress(f"匯出 WT{wafer.wt_numbers[wt]} BLK {blk} · {pattern}")
+                raise ValueError("Select an available Pattern.")
+            progress(f"Exporting WT{wafer.wt_numbers[wt]} BLK {blk} · {pattern}")
             output.extend(map(str, save_pattern_report(wafer, folder, wt, chip, blk, pattern, data["kind"])))
         elif action == "export":
             wafer = data["wafer"]
             folder = Path(data["folder"]) if data.get("folder") else wafer.phases[0].source.path.parent
             kind = data.get("kind", "full")
             if kind not in {"full", "address", "fbc", "cat", "ppt", "monitor"}:
-                raise ValueError("不支援的匯出格式。")
+                raise ValueError("Unsupported export format.")
             if (wafer.source_mode != "full" and kind not in (wafer.source_mode, "cat")
                     or kind == "ppt" and not wafer.full):
-                raise ValueError("請先完成完整分析或對應資料的匯入。")
-            progress(f"匯出 {kind.upper()} 報表")
+                raise ValueError("Complete the full analysis or import the corresponding data first.")
+            progress(f"Exporting {kind.upper()} report")
             selected = data.get("chip")
             chip = tuple(map(int, selected)) if kind == "full" and selected else None
             if chip is not None and chip not in wafer.chips:
-                raise ValueError("選取的 Chip 不在目前的 wafer。")
+                raise ValueError("The selected Chip is not in the current wafer.")
             if kind == "monitor":
                 folder = folder / f"Analysis_{date.today():%Y%m%d}"
             output.append(str(save_report(wafer, folder, kind, chip=chip,
@@ -88,7 +88,7 @@ def run_job(action, data):
             config = Config.create(data["rows"], data.get("mode", "FBC0"), full=full)
             paths = list(dict.fromkeys(Path(p).resolve() for p in data["paths"]))
             if not paths:
-                raise ValueError("請先選取 ASC 檔案。")
+                raise ValueError("Select ASC files first.")
             groups = defaultdict(list)
             for path in paths:
                 try:
@@ -99,29 +99,29 @@ def run_job(action, data):
                         raise
                     warnings.append(str(exc))
             if full and len(groups) != 1:
-                raise ValueError("完整分析需選同一 Lot／Wafer，跨批請使用批次匯出。")
+                raise ValueError("Full analysis requires the same Lot/Wafer. Use batch export for multiple wafers.")
             for group in groups.values():
                 try:
                     source_mode = data.get("source_mode", "full") if full else "full"
                     if source_mode not in ("full", "address", "fbc"):
-                        raise ValueError("匯入模式無效。")
+                        raise ValueError("Invalid import mode.")
                     wafer = load_wafer(group, config, full=full, source_mode=source_mode, report=progress)
                     for row in wafer.manifest:
                         if row["missing"]:
-                            warnings.append(f"{Path(row['path']).name} 缺少 TNO " + ", ".join(map(str, row["missing"])))
+                            warnings.append(f"{Path(row['path']).name} is missing TNO " + ", ".join(map(str, row["missing"])))
                         warnings.extend(f"{Path(row['path']).name} · {issue}" for issue in row["issues"])
                     if not full:
                         if any(phase.fbc_error for phase in wafer.phases):
-                            raise ValueError("FBC 格式有誤，請檢查個別檔案診斷。")
+                            raise ValueError("Invalid FBC format. Check the file diagnostics.")
                         folder = group[0].path.parent / f"Address_{date.today():%Y%m%d}"
-                        progress(f"匯出 {wafer.label}")
+                        progress(f"Exporting {wafer.label}")
                         output.append(str(save_report(wafer, folder, "batch", batch_name(wafer))))
                     elif source_mode == "full":
-                        progress("計算 Wafer Map、Address 核對和 Chip Vmin")
+                        progress("Computing Wafer Maps, Address audit and Chip Vmin")
                         wafer.map_stats
                         wafer.all_vmin
                     elif source_mode == "fbc":
-                        progress("計算 FBC Wafer Map 與 Chip Vmin")
+                        progress("Computing FBC Wafer Maps and Chip Vmin")
                         wafer.all_vmin
                 except (OSError, ValueError) as exc:
                     if full:
@@ -129,14 +129,14 @@ def run_job(action, data):
                     warnings.append(f"{group[0].label} · {exc}")
                     wafer = None
             if not full and not output:
-                raise ValueError("本批次沒有成功匯出的 wafer。")
+                raise ValueError("No wafer was successfully exported in this batch.")
         with LOCK:
-            STATE.update(working=False, message="作業完成", output=output, warnings=warnings, error="")
+            STATE.update(working=False, message="Completed", output=output, warnings=warnings, error="")
             if action in ("analyze", "reopen"):
                 STATE["wafer"] = wafer
     except Exception as exc:
         with LOCK:
-            STATE.update(working=False, error=str(exc), output=output, warnings=warnings, message="作業停止")
+            STATE.update(working=False, error=str(exc), output=output, warnings=warnings, message="Stopped")
         if not isinstance(exc, (OSError, ValueError)):
             import traceback
             traceback.print_exc()
@@ -152,10 +152,10 @@ def correlation_chips(raw, wafer):
     value = json.loads(raw) if isinstance(raw, str) else raw
     if not isinstance(value, list) or any(not isinstance(xy, list) or len(xy) != 2
             or any(type(v) is not int for v in xy) for xy in value):
-        raise ValueError("Chip 選取必須是 X/Y 整數座標清單。")
+        raise ValueError("Chip selection must be a list of integer X/Y pairs.")
     chips = list(dict.fromkeys(tuple(xy) for xy in value))
     if not set(chips).issubset(wafer.chips):
-        raise ValueError("選取的 Chip 不在目前 wafer。")
+        raise ValueError("The selected Chip is not in the current wafer.")
     return chips
 
 
@@ -163,20 +163,20 @@ def view(wafer, query):
     get = query.get
     number = int(get("wt", wafer.wt_numbers[0]))
     if number not in wafer.wt_numbers:
-        raise ValueError(f"尚未匯入 WT{number} 的資料。")
+        raise ValueError(f"No data imported for WT{number}.")
     wt = wafer.wt_numbers.index(number)
     kind = get("view", "map")
     pattern = get("pattern", next(iter(wafer.config.patterns), ""))
     if kind == "map":
         layer = get("layer", "fail")
         if (layer not in MAPS and layer not in ("vmin_pattern", "vmin_merge")) or (layer in ("fail", "wr", "loss", "vmin_pattern") and pattern not in wafer.config.patterns):
-            raise ValueError("Map 類型或 Pattern 無效。")
+            raise ValueError("Invalid Map type or Pattern.")
         return wafer.map(wt, pattern, layer)
     chip = None
     if "x" in query and "y" in query:
         chip = int(get("x")), int(get("y"))
         if chip not in wafer.chips:
-            raise ValueError("Chip 座標不存在。")
+            raise ValueError("Chip coordinates do not exist.")
     if kind == "grid" and chip is not None:
         return wafer.grid(chip)
     if kind in ("vmin_distribution", "monitor_correlation"):
@@ -185,18 +185,18 @@ def view(wafer, query):
         merge_available = {"scan", "march"} <= {name.casefold() for name in patterns}
         if not (scope == "chip" or (scope == "merge" and merge_available)
                 or (scope.startswith("pattern:") and scope.removeprefix("pattern:") in patterns)):
-            raise ValueError("Vmin 判定範圍無效。")
+            raise ValueError("Invalid Vmin scope.")
         if kind == "monitor_correlation":
             if scope not in wafer.monitor_scopes:
-                raise ValueError("請選取 Scan、March 或 Scan & March。")
+                raise ValueError("Select Scan, March or Scan & March.")
             return wafer.monitor_correlation(wt, scope, chips=correlation_chips(get("chips"), wafer))
         if chip is None:
-            raise ValueError("請先選取 Chip。")
+            raise ValueError("Select a Chip first.")
         return wafer.vmin_distribution(wt, chip, scope, with_matches=get("matches") == "1")
     if kind == "detail" and chip is not None:
         blk = int(get("blk"))
         if not 0 <= blk < 256:
-            raise ValueError("BLK 必須在 0～255。")
+            raise ValueError("BLK must be between 0 and 255.")
         detail = wafer.detail(wt, chip, blk)
         detail["addresses"] = []
         detail["wr_matches"] = {"labels": MATCH_LABELS, "patterns": {}}
@@ -229,14 +229,14 @@ def view(wafer, query):
         source = ((*xy, *(f"≥ {voltage_text(result[k])}" if k == "voltage" and result.get("relation") == ">=" else result[k] for k in VMIN_COLUMNS)) for (p, xy), result in wafer.all_vmin.items()
                   if p == wt and (chip is None or chip == xy))
     else:
-        raise ValueError("檢視不存在。")
+        raise ValueError("View does not exist.")
     page = max(0, int(get("page", "0")))
     highlighted = None
     if kind == "address" and get("target") and chip is not None:
         target = tuple(int(n) for n in get("target").split(","))
         source_row = next((i for i, row in enumerate(wafer.address_rows(chip)) if row[2:6] == target), None)
         if source_row is None:
-            raise ValueError("找不到對應的 Fail Address 列。")
+            raise ValueError("No matching Fail Address row found.")
         page, highlighted = divmod(source_row, 100)
     rows = list(islice(source, page * 100, page * 100 + 101))
     return {"headers": headers, "rows": rows[:100], "more": len(rows) > 100,
@@ -268,7 +268,7 @@ class DesktopAPI:
                 with LOCK:
                     wafer = STATE["wafer"]
                     if wafer is None:
-                        raise ValueError("請先執行分析。")
+                        raise ValueError("Run analysis first.")
                     return view(wafer, data)
             if action == "pick":
                 return self._pick(data["kind"])
@@ -279,21 +279,21 @@ class DesktopAPI:
             if action == "save-settings":
                 key = data["profile"]
                 if key not in ("full", "batch"):
-                    raise ValueError("設定類型無效。")
+                    raise ValueError("Invalid configuration type.")
                 config = Config.create(data["rows"], data["mode"], full=key == "full")
                 with LOCK:
                     save_settings(key, config)
                 return config.json()
             if action not in ("analyze", "batch", "export", "reopen", "pattern-export"):
-                raise ValueError("找不到此操作。")
+                raise ValueError("Unknown operation.")
             with LOCK:
                 if STATE["working"]:
-                    raise ValueError("前一項作業仍在執行。")
+                    raise ValueError("The previous job is still running.")
                 if action in ("export", "pattern-export"):
                     data["wafer"] = STATE["wafer"]
                     if data["wafer"] is None:
-                        raise ValueError("請先執行分析。")
-                STATE.update(working=True, message="準備資料", error="", output=[], warnings=[])
+                        raise ValueError("Run analysis first.")
+                STATE.update(working=True, message="Preparing data", error="", output=[], warnings=[])
             Thread(target=run_job, args=(action, data), daemon=True).start()
             return {"started": True}
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -311,7 +311,7 @@ class DesktopAPI:
             types = ("Excel / CSV (*.xlsx;*.xlsm;*.csv)",) if kind == "settings" else ("Excel (*.xlsx;*.xlsm)",)
             paths = self._window.create_file_dialog(FileDialog.OPEN, file_types=types)
         else:
-            raise ValueError("不支援的檔案選擇方式。")
+            raise ValueError("Unsupported file picker type.")
         paths = list(paths or ())
         return {"paths": paths, "config": settings_import(Path(paths[0])) if kind == "settings" and paths else None}
 
@@ -342,6 +342,6 @@ if __name__ == "__main__":
             raise
         from ctypes import windll
 
-        windll.user32.MessageBoxW(0, f"無法啟動 SRAM Wafer Studio。請確認已安裝 Microsoft Edge WebView2 Runtime。\n\n{error}",
+        windll.user32.MessageBoxW(0, f"Unable to start SRAM Wafer Studio. Check that Microsoft Edge WebView2 Runtime is installed.\n\n{error}",
                                   "SRAM Wafer Studio", 0x10)
         raise SystemExit(1)

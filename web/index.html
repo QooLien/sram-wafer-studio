@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,40 +13,40 @@
     <svg width="34" height="34" viewBox="0 0 36 36" aria-hidden="true"><rect x="1" y="1" width="34" height="34" rx="8" fill="#66d8cb"/><path d="M11 11h14v14H11zM7 14h4m-4 8h4m14-8h4m-4 8h4M14 7v4m8-4v4m-8 14v4m8-4v4" stroke="#132638" stroke-width="2" fill="none"/><path d="M15 15h6v6h-6z" fill="#132638"/></svg>
     <span>SRAM <strong>Wafer Studio</strong></span>
   </button>
-  <nav aria-label="工作區">
-    <button class="nav selected" data-page="import"><span>⇥</span>匯入 ASC</button>
+  <nav aria-label="Workspace">
+    <button class="nav selected" data-page="import"><span>⇥</span>Import ASC</button>
     <button class="nav" data-page="maps"><span>▦</span>Wafer Maps</button>
-    <button class="nav" data-page="data"><span>▤</span>資料核對</button>
-    <button class="nav" data-page="correlation"><span>⋮</span>W/R 相關性</button>
-    <button class="nav" data-page="batch"><span>⇉</span>批次匯出</button>
-    <button class="nav" data-page="settings"><span>⚙</span>TNO 設定</button>
+    <button class="nav" data-page="data"><span>▤</span>Data Inspection</button>
+    <button class="nav" data-page="correlation"><span>⋮</span>W/R Correlation</button>
+    <button class="nav" data-page="batch"><span>⇉</span>Batch export</button>
+    <button class="nav" data-page="settings"><span>⚙</span>TNO Configuration</button>
   </nav>
-  <div class="aside-foot"><i></i> 本機工作區</div>
+  <div class="aside-foot"><i></i> Local workspace</div>
 </aside>
 <main>
-<header class="top"><span id="breadcrumb">工作區 / 匯入 ASC</span><button id="open-import" class="quiet">匯入資訊</button><button id="open-export" class="secondary">匯出報表</button></header>
+<header class="top"><span id="breadcrumb">Workspace / Import ASC</span><button id="open-import" class="quiet">Import Info</button><button id="open-export" class="secondary">Export Report</button></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <section class="page" id="page-import">
-  <div class="heading"><h1>匯入 ASC</h1><p>選取同一個 Lot／Wafer 的 1–3 份 ASC。WT 優先使用檔名標記。</p></div>
+  <div class="heading"><h1>Import ASC</h1><p>Select 1–3 ASC files from the same Lot/Wafer. Filename WT labels take priority.</p></div>
   <div class="card import-card">
-    <div class="import-head"><div><h2>Raw Data</h2><p id="file-count">尚未選取檔案</p></div><div class="actions"><button id="demo" class="quiet">載入 128 芯片範例</button><button id="pick-full" class="secondary">選擇 ASC</button></div></div>
+    <div class="import-head"><div><h2>Raw Data</h2><p id="file-count">No files selected</p></div><div class="actions"><button id="demo" class="quiet">Load 128-Chip demo</button><button id="pick-full" class="secondary">Select ASC</button></div></div>
     <div id="full-files" class="file-list"></div>
-    <div class="import-footer"><label>匯入模式 <select id="source-mode"><option value="full">匯入並分析</option><option value="address">僅匯入 Fail Address</option><option value="fbc">僅匯入 FBC</option></select></label><label>Vmin Mode <select id="vmin-mode"></select></label><span id="full-profile"></span><button id="run-full" class="primary">開始匯入 →</button></div>
+    <div class="import-footer"><label>Import mode <select id="source-mode"><option value="full">Import and analyze</option><option value="address">Fail Address only</option><option value="fbc">FBC only</option></select></label><label>Vmin Mode <select id="vmin-mode"></select></label><span id="full-profile"></span><button id="run-full" class="primary">Start import →</button></div>
   </div>
 </section>
 <section class="page" id="page-maps" hidden>
   <div class="heading map-heading"><h1>Wafer Maps</h1><p id="map-caption"></p></div>
-  <div class="empty card" id="map-empty">匯入 ASC 後即可查看 Wafer Map。<button class="secondary" data-page="import">前往匯入</button></div>
+  <div class="empty card" id="map-empty">Import ASC files to view Wafer Maps.<button class="secondary" data-page="import">Go to import</button></div>
   <div id="map-results" hidden>
     <div class="card toolbar map-controls">
-      <div class="chips stage-list" aria-label="分析檢視">
+      <div class="chips stage-list" aria-label="Analysis view">
         <button id="stage-wafer" type="button" data-stage="wafer" aria-controls="map-layout" aria-pressed="true">Wafer Map</button>
         <button id="stage-matrix" type="button" data-stage="matrix" aria-controls="distribution" aria-pressed="false" disabled>256 BLK</button>
-        <button id="stage-detail" type="button" data-stage="detail" aria-controls="block-detail" aria-pressed="false" disabled>BLK 明細</button>
+        <button id="stage-detail" type="button" data-stage="detail" aria-controls="block-detail" aria-pressed="false" disabled>BLK Details</button>
       </div>
       <div id="wt-list" class="chips" aria-label="Test stages"></div>
       <label id="pattern-label">Pattern <select id="pattern"></select></label>
-      <label id="layer-label">圖層 <select id="layer"></select></label>
+      <label id="layer-label">Layer <select id="layer"></select></label>
     </div>
     <div id="map-layout" class="map-layout">
       <section class="card map-card">
@@ -54,7 +54,7 @@
         <div class="map-scroll"><div id="wafer-grid" class="wafer"></div></div>
       </section>
       <aside class="map-inspector">
-        <section class="kpis" id="kpis" aria-label="匯入統計"></section>
+        <section class="kpis" id="kpis" aria-label="Import statistics"></section>
         <section class="card chip-card" id="chip-summary"></section>
       </aside>
     </div>
@@ -87,51 +87,51 @@
 </section>
 <section class="page" id="page-correlation" hidden>
   <div class="heading"><h1>W/R Monitor Correlation</h1></div>
-  <p class="empty card" id="correlation-empty">請先匯入完整 ASC 資料，並設定 Scan 或 March Pattern。</p>
+  <p class="empty card" id="correlation-empty">Import complete ASC data and configure a Scan or March Pattern first.</p>
   <div id="correlation-report" hidden>
     <div class="card toolbar correlation-controls">
       <label>WT <select id="correlation-wt"></select></label>
       <label>Pattern <select id="correlation-scope"></select></label>
-      <button class="secondary" id="correlation-export" title="依目前選取 Chip 匯出全部 WT 與 Pattern">Export Excel</button>
+      <button class="secondary" id="correlation-export" title="Export selected Chips across all WT and Pattern scopes">Export Excel</button>
     </div>
     <div id="correlation-content" aria-live="polite"></div>
   </div>
 </section>
 <section class="page" id="page-data" hidden>
   <div class="heading audit-heading">
-    <div><h1>資料核對</h1><p>依 WT、Pattern 或 Chip 篩選，查看 Address 與 FBC 的對應。</p></div>
-    <div class="actions"><button id="data-back" type="button" class="secondary">← 返回上一頁</button><button id="open-xlsm" class="secondary">核對既有 VBA 結果</button></div>
+    <div><h1>Data Inspection</h1><p>Filter by WT, Pattern or Chip to inspect Address and FBC data.</p></div>
+    <div class="actions"><button id="data-back" type="button" class="secondary">← Back to previous page</button><button id="open-xlsm" class="secondary">Verify existing VBA results</button></div>
   </div>
-  <div class="empty card" id="data-empty">匯入 ASC 後即可查看資料。<button class="secondary" data-page="import">前往匯入</button></div>
+  <div class="empty card" id="data-empty">Import ASC files to inspect data.<button class="secondary" data-page="import">Go to import</button></div>
   <section class="card" id="data-results" hidden>
     <div class="toolbar">
-      <label>資料表 <select id="data-view"></select></label><label>WT <select id="data-wt"></select></label>
+      <label>Table <select id="data-view"></select></label><label>WT <select id="data-wt"></select></label>
       <label id="data-scope">Pattern <select id="data-pattern"></select></label>
-      <label class="checkbox"><input type="checkbox" id="filter-chip"> 只看選取的 Chip</label>
+      <label class="checkbox"><input type="checkbox" id="filter-chip"> Selected Chip only</label>
     </div>
     <div id="address-header" aria-hidden="true" hidden><div id="address-head"></div></div>
-    <div id="data-table" class="table-scroll" tabindex="0" role="region" aria-label="資料核對表格"></div>
-    <div class="pagination"><button id="prev" class="secondary">上一頁資料</button><span id="page-no"></span><button id="next" class="secondary">下一頁資料</button></div>
+    <div id="data-table" class="table-scroll" tabindex="0" role="region" aria-label="Data inspection table"></div>
+    <div class="pagination"><button id="prev" class="secondary">Previous page</button><span id="page-no"></span><button id="next" class="secondary">Next page</button></div>
   </section>
 </section>
 <section class="page" id="page-batch" hidden>
-  <div class="heading"><h1>批次匯出</h1><p>可選不同 Lot 或 Wafer。每片輸出一個含 Cat Map、Fail Address 與 Fail BLK 的 Excel。</p></div>
+  <div class="heading"><h1>Batch export</h1><p>Select different Lots or Wafers. Each wafer produces an Excel file with Cat Map, Fail Address and Fail BLK data.</p></div>
   <div class="card import-card">
-    <div class="import-head"><div><h2>ASC 檔案</h2><p id="batch-count">尚未選取檔案</p></div><button id="pick-batch" class="secondary">選擇 ASC</button></div>
+    <div class="import-head"><div><h2>ASC files</h2><p id="batch-count">No files selected</p></div><button id="pick-batch" class="secondary">Select ASC</button></div>
     <div id="batch-files" class="file-list"></div>
-    <div class="import-footer"><span id="batch-profile">依批次版 TNO 設定匯出到來源的 Address_日期 資料夾。</span><button id="run-batch" class="primary">開始批次匯出 →</button></div>
+    <div class="import-footer"><span id="batch-profile">Export using the batch TNO configuration to Address_YYYYMMDD in the source folder.</span><button id="run-batch" class="primary">Start batch export →</button></div>
   </div>
   <div id="batch-results"></div>
 </section>
 <section class="page" id="page-settings" hidden>
-  <div class="heading"><h1>TNO 設定</h1><p>Function 列順序用於 Vmin 與 Pattern 判定。Stop Sign 填在該 Pattern 的最後一站。</p></div>
+  <div class="heading"><h1>TNO Configuration</h1><p>Function row order determines Vmin and Pattern boundaries. Set Stop Sign on the last station of each Pattern.</p></div>
   <section class="card">
-    <div class="toolbar"><label>設定 <select id="profile"><option value="full">完整版</option><option value="batch">批次匯出版</option></select></label><button id="pick-config" class="secondary">匯入 Excel / CSV</button><button id="add-row" class="quiet">＋ 新增一列</button><button id="save-config" class="primary">儲存設定</button></div>
+    <div class="toolbar"><label>Configuration <select id="profile"><option value="full">Full analysis</option><option value="batch">Batch export</option></select></label><button id="pick-config" class="secondary">Import Excel / CSV</button><button id="add-row" class="quiet">＋ Add row</button><button id="save-config" class="primary">Save configuration</button></div>
     <div class="table-scroll config-wrap"><table class="config"><thead id="config-head"></thead><tbody id="config-rows"></tbody></table></div>
   </section>
 </section>
 </main>
-<dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button id="close-modal" class="quiet" aria-label="關閉">✕</button></div><div id="modal-content"></div></dialog>
+<dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button id="close-modal" class="quiet" aria-label="Close">✕</button></div><div id="modal-content"></div></dialog>
 <!-- APP_SCRIPT -->
 </body>
 </html>

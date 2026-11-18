@@ -70,7 +70,7 @@ class Config:
     @classmethod
     def create(cls, rows, mode="FBC0", *, full=True):
         if mode not in MODES:
-            raise ValueError("請選擇 FBC0～FBC10 或 FBC90%。")
+            raise ValueError("Select FBC0 through FBC10 or FBC90%.")
         tests = []
         used = set()
         for i, row in enumerate(rows, 2):
@@ -78,7 +78,7 @@ class Config:
             if raw is None or str(raw).strip() == "":
                 if any(str(row.get(key) if row.get(key) is not None else "").strip()
                        for key in ("name", "voltage", "cat", "stop")):
-                    raise ValueError(f"設定第 {i} 列有資料但缺少 TNO。")
+                    raise ValueError(f"Configuration row {i} has data but no TNO.")
                 continue
             try:
                 tno = int(raw)
@@ -100,17 +100,17 @@ class Config:
                 if group == "Monitor" and stop:
                     raise ValueError()
             except (TypeError, ValueError, OverflowError) as exc:
-                raise ValueError(f"設定第 {i} 列格式錯誤，請確認 TNO、Func.、Voltage、Fail Cat 和 Stop Sign。") from exc
+                raise ValueError(f"Invalid configuration row {i}. Check TNO, Function, Voltage, Fail Cat and Stop Sign.") from exc
             if tno in used:
-                raise ValueError(f"TNO {tno} 重複。")
+                raise ValueError(f"Duplicate TNO {tno}.")
             used.add(tno)
             tests.append(Test(group, tno, name, voltage, cat, stop if full else ""))
         if not tests:
-            raise ValueError("設定至少需要一筆 TNO。")
+            raise ValueError("Configuration requires at least one TNO.")
         result = cls(tuple(sorted(tests, key=lambda t: t.group != "Monitor")), mode)
         result.patterns
         if full and not result.patterns:
-            raise ValueError("Function 至少需要一個 Pattern 終點（Stop Sign）。")
+            raise ValueError("Function requires at least one Pattern endpoint (Stop Sign).")
         return result
 
     @cached_property
@@ -141,7 +141,7 @@ class Config:
             if t.stop:
                 name = t.stop
                 if name.casefold() in names:
-                    raise ValueError(f"Stop Sign {name} 重複。")
+                    raise ValueError(f"Duplicate Stop Sign {name}.")
                 names.add(name.casefold())
                 found[name] = tuple(scope)
                 scope.clear()
@@ -215,7 +215,7 @@ class Identity:
 
 def identity(path: Path):
     if path.suffix.lower() != ".asc" or not path.is_file():
-        raise ValueError(f"找不到 ASC 檔案 {path.name}。")
+        raise ValueError(f"ASC file not found: {path.name}。")
     fields = {}
     third = ""
     with text_stream(path) as stream:
@@ -235,14 +235,14 @@ def identity(path: Path):
     wafer = fields.get("WNO", "").lstrip("#")
     step = re.fullmatch(r"\D*(\d+)\D*", fields.get("STEP", ""))
     if not lot or not wafer.isdigit() or not step:
-        raise ValueError(f"{path.name} 缺少有效 LOT、WNO 或 STEP。")
+        raise ValueError(f"{path.name} is missing a valid LOT, WNO or STEP.")
     program = fields.get("PROGRAM", third)
     version_pos = program.upper().find("VER_")
     version = program[version_pos + 4:version_pos + 6]
     version = version.upper() if version_pos >= 0 and re.fullmatch(r"[A-Za-z]{2}", version) else "Unknown"
     labels = re.findall(r"(?:^|[^a-z0-9])WT([123])(?=$|[^a-z0-9])", path.stem, re.I)
     if len(labels) > 1:
-        raise ValueError(f"{path.name} 的 WT 標記不明確。")
+        raise ValueError(f"{path.name} has ambiguous WT labels.")
     return Identity(path, lot, int(wafer), int(step[1]), version,
                     int(labels[0]) if labels else None)
 
@@ -290,7 +290,7 @@ def read_asc(source, config, *, addresses=True, fbc=True, report=lambda _: None)
             return
         chip, tno, start = pending
         if len(record) != BLKS:
-            phase.diagnostic(f"第 {start} 行 TNO {tno} X{chip[0]} Y{chip[1]} FBC 欄數為 {len(record)}，應為 256。")
+            phase.diagnostic(f"Line {start}: TNO {tno} X{chip[0]} Y{chip[1]} has {len(record)} FBC columns; expected 256.")
         else:
             die = phase.chips[chip]
             if tno in die.fbc:
@@ -304,7 +304,7 @@ def read_asc(source, config, *, addresses=True, fbc=True, report=lambda _: None)
     with text_stream(source.path) as stream:
         for n, line in enumerate(stream, 1):
             if n % 20000 == 0:
-                report(f"{source.path.name} · {n:,} 行 · {fbc_total:,} 筆 FBC")
+                report(f"{source.path.name} · {n:,} lines · {fbc_total:,} FBC records")
             match = FBC.search(line) if fbc and "=" in line else None
             is_cat = "catlst" in line.lower() if "=" in line else False
             tags = {}
@@ -317,20 +317,20 @@ def read_asc(source, config, *, addresses=True, fbc=True, report=lambda _: None)
                 if is_cat and tags.get("TNO") == 1000:
                     cat = CAT.search(line)
                     if cat is None:
-                        phase.diagnostic(f"第 {n} 行 CATLST 格式錯誤。")
+                        phase.diagnostic(f"Line {n}: invalid CATLST format.")
                     else:
                         category = cat[1].find("1") + 1
                         if category and die.cat and die.cat != category:
-                            phase.diagnostic(f"第 {n} 行 X{chip[0]} Y{chip[1]} CATLST 衝突。")
+                            phase.diagnostic(f"Line {n}: conflicting CATLST for X{chip[0]} Y{chip[1]}.")
                         elif category:
                             die.cat = category
             if match:
                 finish()
                 if tags.get("TNO") is None:
-                    phase.diagnostic(f"第 {n} 行的 FBC 標頭缺少 TNO。")
+                    phase.diagnostic(f"Line {n}: FBC header has no TNO.")
                 elif tags["TNO"] in selected:
                     if chip is None:
-                        phase.diagnostic(f"第 {n} 行 TNO {tags['TNO']} 的 FBC 缺少有效 X/Y。")
+                        phase.diagnostic(f"Line {n}: FBC for TNO {tags['TNO']} has no valid X/Y.")
                     else:
                         pending = chip, tags["TNO"], n
                         payload = line[match.end():].strip()
@@ -342,7 +342,7 @@ def read_asc(source, config, *, addresses=True, fbc=True, report=lambda _: None)
             if pending is not None and payload:
                 tokens = [s for s in SPLIT.split(payload) if s]
                 if any(not re.fullmatch(r"[0-9]{1,16}", s) or int(s) > 9_007_199_254_740_990 for s in tokens):
-                    phase.diagnostic(f"第 {n} 行 FBC 必須是非負整數。")
+                    phase.diagnostic(f"Line {n}: FBC must be a nonnegative integer.")
                     pending, record = None, []
                 else:
                     record.extend(map(int, tokens))
@@ -564,7 +564,7 @@ def phase_numbers(sources):
     labels = tuple(source.source_wt for source in sources)
     claimed = [label for label in labels if label is not None]
     if len(claimed) != len(set(claimed)):
-        raise ValueError("同一 Lot／Wafer 的 ASC 檔名 WT 標記不可重複。")
+        raise ValueError("ASC filename WT labels must be unique within a Lot/Wafer.")
     if not claimed:
         return tuple(range(1, len(labels) + 1))
     if len(claimed) == len(labels):
@@ -572,7 +572,7 @@ def phase_numbers(sources):
     candidates = [numbers for numbers in combinations((1, 2, 3), len(labels))
                   if all(label is None or label == number for label, number in zip(labels, numbers))]
     if len(candidates) != 1:
-        raise ValueError("無法從 STEP 確定所有 WT，請在 ASC 檔名標記 WT1、WT2 或 WT3。")
+        raise ValueError("Cannot resolve WT from STEP. Label ASC filenames with WT1, WT2 or WT3.")
     return candidates[0]
 
 
@@ -853,11 +853,11 @@ class Wafer:
 
     def monitor_correlation(self, wt, scope, *, chips=None):
         if self.source_mode != "full":
-            raise ValueError("請匯入完整 FBC 與 Fail Address 資料。")
+            raise ValueError("Import complete FBC and Fail Address data.")
         patterns = self.monitor_patterns(scope)
         selected = set(self.chips) if chips is None else set(chips)
         if not selected.issubset(self.chips):
-            raise ValueError("選取的 Chip 不在目前 wafer。")
+            raise ValueError("The selected Chip is not in the current wafer.")
         rows = []
         for chip in self.chips:
             if chip not in selected:
@@ -1162,15 +1162,15 @@ class Wafer:
 def load_wafer(sources, config, *, full=True, source_mode="full", report=lambda _: None):
     ordered = sorted(sources, key=lambda item: item.step)
     if not 1 <= len(ordered) <= 3 or len({x.step for x in ordered}) != len(ordered):
-        raise ValueError("同一 Lot／Wafer 需 1～3 份 ASC，且 STEP 不可重複。")
+        raise ValueError("A Lot/Wafer requires 1–3 ASC files with unique STEP values.")
     if len({x.key for x in ordered}) != 1:
-        raise ValueError("完整分析需選擇同一 Lot、同一 Wafer 的 1～3 份 ASC。")
+        raise ValueError("Full analysis requires 1–3 ASC files from the same Lot and Wafer.")
     phase_data = []
     for wt, source in sorted(zip(phase_numbers(ordered), ordered), key=lambda phase: phase[0]):
-        report(f"讀取 WT{wt} · {source.path.name}")
+        report(f"Reading WT{wt} · {source.path.name}")
         phase_data.append(read_asc(source, config, addresses=source_mode != "fbc",
                                    fbc=source_mode != "address", report=report))
     wafer = Wafer(config, tuple(phase_data), full, source_mode)
     if not wafer.chips:
-        raise ValueError("ASC 內找不到 Chip X/Y。")
+        raise ValueError("No Chip X/Y found in ASC.")
     return wafer

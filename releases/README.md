@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.3.zip](SRAM%20Analysis%20Tool%20v1.8.3.zip)
+[下載 SRAM Analysis Tool v1.8.4.zip](SRAM%20Analysis%20Tool%20v1.8.4.zip)
 
-v1.8.3 修正 Stop Sign flow 尾端電壓回升的 Vmin：若達標 TNO 位於回升尾段，回溯使用最後的低電壓 Go/No-Go 項目。例如 0.765 V 後接 1.26 V 並在末項達 FBC90%，輸出 0.765 V，不誤判為 ≥ Hard Fail 電壓。適用 Scan、March、自訂 Stop Sign 及 Merge 內各 flow；保留達標 TNO、原始測試電壓、FBC 與回溯來源。
+v1.8.4 將整體介面、操作提示、驗證與進度訊息統一為英文。W/R Correlation Wafer Map 新增 W worse（橘）、R worse（藍）、W = R（紫）、兩者擷取地址為 0（綠）、No data（灰）的顏色／符號分類；選取框線不覆蓋分類底色。worse 僅比較擷取地址數量，不代表物理嚴重度。保留原始 Pattern／Stop Sign 名稱與所有分析規則。
 
 保留版本：
 
+- [v1.8.3](SRAM%20Analysis%20Tool%20v1.8.3.zip)
 - [v1.8.2](SRAM%20Analysis%20Tool%20v1.8.2.zip)
 - [v1.8.1](SRAM%20Analysis%20Tool%20v1.8.1.zip)
 - [v1.8.0](SRAM%20Analysis%20Tool%20v1.8.0.zip)

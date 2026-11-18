@@ -312,7 +312,7 @@ def write_workbook(path, title, stations, judge, matches, wr_matches, comparison
 
 def save_pattern_report(wafer, folder, wt, chip, blk, pattern, kind):
     if kind not in ("charts", "excel"):
-        raise ValueError("不支援的 Pattern 匯出格式。")
+        raise ValueError("Unsupported Pattern export format.")
     x, y = chip
     scope = f"{wafer.label}  |  WT{wafer.wt_numbers[wt]}  |  X{x} Y{y}  |  BLK {blk}"
     title = f"{pattern}  |  {scope}"

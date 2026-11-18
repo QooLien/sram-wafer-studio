@@ -15,7 +15,7 @@ from workbook_settings import workbook_config
 def phase_number(value):
     found = re.fullmatch(r"WT([123])", str(value or ""), re.IGNORECASE)
     if not found:
-        raise ValueError(f"無效的 WT 標記 {value}。")
+        raise ValueError(f"Invalid WT label {value}.")
     return int(found[1]) - 1
 
 
@@ -26,18 +26,18 @@ def checked_integer(value, low, high, name):
             return number
     except (ValueError, TypeError, OverflowError):
         pass
-    raise ValueError(f"既有 Excel 的 {name} 欄位無效。")
+    raise ValueError(f"Invalid {name} field in the existing Excel.")
 
 
 def source_index(book):
     rows = list(book["Import Index"].iter_rows(min_row=2, max_row=7, min_col=8, max_col=15, values_only=True))
     if any("pending" in str(row[0]).lower() for row in rows):
-        raise ValueError("既有 Excel 的 Address 或 FBC 匯入尚未完成。")
+        raise ValueError("Address or FBC import in the existing Excel file is incomplete.")
     if rows[0][0] != "Address" or rows[3][0] != "FBC":
         return {}
     for a, f in zip(rows[:3], rows[3:]):
         if a[1:6] != f[1:6]:
-            raise ValueError(f"{a[1]} 的 Address 與 FBC 的 LOT／WNO／STEP／版本不一致。")
+            raise ValueError(f"Address and FBC LOT/WNO/STEP/version do not match for {a[1]}.")
     return {phase_number(row[1]): row for row in rows[3:] if row[0] == "FBC"}
 
 
@@ -52,9 +52,9 @@ def address_index(book, config, headers):
             if number not in config.index:
                 continue
             if column >= len(headers) or column < 6 or not str(headers[column]).split("\n")[0].upper() == f"WT{phase+1}":
-                raise ValueError("Fail Address 的標題和 TNO 索引不一致。")
+                raise ValueError("Fail Address headers do not match the TNO index.")
             if column in result or (phase, number) in result.values():
-                raise ValueError("Fail Address 的 TNO 索引重複。")
+                raise ValueError("Duplicate TNO indices in Fail Address.")
             result[column] = phase, number
     if result:
         return result
@@ -68,7 +68,7 @@ def address_index(book, config, headers):
         name = match[2].strip()
         hits = [int(name)] if name.isdigit() else labels.get(name, [])
         if len(hits) > 1:
-            raise ValueError(f"既有 Excel 的欄位 {name} 對應多個 TNO。")
+            raise ValueError(f"Existing Excel column {name} maps to multiple TNOs.")
         if hits and hits[0] in config.index:
             result[column] = int(match[1]) - 1, hits[0]
     return result
@@ -81,10 +81,10 @@ def read_existing(path, report=lambda _: None):
     book = load_workbook(path, read_only=True, data_only=True)
     try:
         if not {"Fail Address", "FBC by BLK"}.issubset(book.sheetnames):
-            raise ValueError("此核對需要原 VBA 的 .xlsm 結果，包含 Config、Fail Address 與 FBC by BLK。")
+            raise ValueError("Verification requires an original VBA .xlsm result containing Config, Fail Address and FBC by BLK.")
         indexes = source_index(book) if "Import Index" in book.sheetnames else {}
         if not indexes:
-            warnings.append("此 Excel 未記錄完整的來源識別。請確認 Fail Address 和 FBC 來自同一組 ASC。")
+            warnings.append("Source identity is incomplete. Confirm that Fail Address and FBC use the same ASC sources.")
 
         def get_phase(wt):
             if wt not in phases:
@@ -100,7 +100,7 @@ def read_existing(path, report=lambda _: None):
                 phases[wt] = Phase(ident)
             return phases[wt]
 
-        report("讀取既有 Excel 的 FBC by BLK")
+        report("Reading FBC by BLK from existing Excel")
         sheet = book["FBC by BLK"]
         for data in sheet.iter_rows(min_row=2, max_col=260, values_only=True):
             if data[1] is None:
@@ -113,21 +113,21 @@ def read_existing(path, report=lambda _: None):
             phase = get_phase(wt)
             die = phase.chips.setdefault((x, y), ChipData())
             if tno in die.fbc:
-                raise ValueError(f"FBC 有重複的 WT{wt+1} X{x} Y{y} TNO {tno}。")
+                raise ValueError(f"Duplicate FBC for WT{wt+1} X{x} Y{y} TNO {tno}.")
             values = array("Q", (checked_integer(v, 0, 9_007_199_254_740_990, "FBC") for v in data[4:4+BLKS]))
             die.fbc[tno] = values
             die.masks[tno] = sum(1 << b for b, v in enumerate(values) if v)
             phase.seen.add(tno)
         if not phases:
-            raise ValueError("既有 Excel 沒有可核對的 FBC 紀錄。")
+            raise ValueError("No FBC records available for verification in the existing Excel.")
 
-        report("讀取既有 Excel 的 Fail Address")
+        report("Reading Fail Address from existing Excel")
         source = book["Fail Address"]
         values = source.values
         headers = next(values, ())
         columns = address_index(book, config, headers)
         if not columns:
-            raise ValueError("Fail Address 缺少可辨識的 WT／TNO 欄位。")
+            raise ValueError("Fail Address has no recognizable WT/TNO columns.")
         category_col = 6 if str(headers[6]).strip().lower() in ("cat.", "cat") else None
         for row in values:
             if row[0] is None or row[1] is None:
@@ -146,7 +146,7 @@ def read_existing(path, report=lambda _: None):
                 category = int(str(row[category_col]).strip().upper().removeprefix("C"))
                 get_phase(0).chips.setdefault((x, y), ChipData()).cat = category or None
         if sorted(phases) != list(range(max(phases) + 1)):
-            raise ValueError("既有 Excel 的 WT 索引缺少中間階段。")
+            raise ValueError("An intermediate WT phase is missing from the existing Excel index.")
         return Wafer(config, tuple(phases[i] for i in sorted(phases))), warnings
     finally:
         book.close()

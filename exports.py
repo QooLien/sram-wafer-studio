@@ -90,7 +90,7 @@ def raster_map(wafer, wt, pattern, kind):
     x0, x1 = min(r["x"] for r in data), max(r["x"] for r in data)
     y0, y1 = min(r["y"] for r in data), max(r["y"] for r in data)
     if max(x1 - x0, y1 - y0) > 99:
-        raise ValueError("Wafer Map 座標範圍超過 100。")
+        raise ValueError("Wafer Map coordinate range exceeds 100.")
     size, axis, top = 72, 42, 78
     width, height = axis + (x1 - x0 + 1) * size + 3, top + (y1 - y0 + 1) * size + 3
     image = Image.new("RGB", (width, height), "white")
@@ -144,7 +144,7 @@ def write_ppt(wafer, path):
 
     panels = [(wt, name) for wt in range(len(wafer.phases)) for name in wafer.config.patterns]
     if not panels:
-        raise ValueError("PPT 匯出需要 Pattern。")
+        raise ValueError("PowerPoint export requires a Pattern.")
     count = [raster_map(wafer, wt, name, "fail") for wt, name in panels]
     quadrants = [raster_map(wafer, wt, name, "wr") for wt, name in panels]
     loss = [raster_map(wafer, wt, name, "loss") for wt, name in panels]
@@ -215,7 +215,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             last = first - 1
             for last, row in enumerate(rows, first):
                 if last >= 1_048_576:
-                    raise ValueError(f"{ws.name} 超過 Excel 的列數上限。")
+                    raise ValueError(f"{ws.name} exceeds the Excel row limit.")
                 ws.write_row(last, 0, row)
                 if return_rows:
                     row_numbers[tuple(row[:6])] = last + 1
@@ -347,7 +347,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             x0, x1 = min(x for x, y in locations), max(x for x, y in locations)
             y0, y1 = min(y for x, y in locations), max(y for x, y in locations)
             if max(x1 - x0, y1 - y0) > 99:
-                raise ValueError("Wafer Map 座標範圍超過 100。")
+                raise ValueError("Wafer Map coordinate range exceeds 100.")
             columns = 2 if kind in ("wr", "loss") else 1
             rows = 2 if kind == "wr" else 1
             span = step * columns
@@ -442,7 +442,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
             for dest, wt, pattern, layer in panels:
                 map_panel(ws, dest, wt, layer, pattern, 2 if layer == "fail" else 1)
                 ws.write_url(dest + height * (2 if layer == "wr" else 1) + 2, 0,
-                             "internal:'Wafer Maps'!A1", string="返回", cell_format=link)
+                             "internal:'Wafer Maps'!A1", string="Back", cell_format=link)
 
         def block_distribution():
             default_chip = next((xy for (_, _, xy), mask in wafer.fail_maps.items()
@@ -553,7 +553,7 @@ def write_excel(wafer, path, report_mode="full", *, chip=None):
                 for row in wafer.address_info(wafer.wt_numbers.index(wt), chip, entry["blk"], wafer.config.patterns[name]):
                     end += 1
                     if end >= 1_048_576:
-                        raise ValueError("Monitor Fail Analysis 超過 Excel 的列數上限。")
+                        raise ValueError("Monitor Fail Analysis exceeds the Excel row limit.")
                     addr = row["address"]
                     volts = ", ".join(map(voltage_text, wafer.config.voltages_for(row["function"])))
                     ws.write_row(end, 0, (wt, name, *chip, *addr, volts, *(
