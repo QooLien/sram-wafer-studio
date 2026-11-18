@@ -8,6 +8,11 @@ from itertools import islice
 from pathlib import Path
 from threading import Lock, Thread
 import json
+import re
+import base64
+import binascii
+from tempfile import NamedTemporaryFile
+from xml.etree import ElementTree
 import sys
 
 from engine import Config, MATCH_LABELS, MODES, csv_config, fbc_voltage_comparison, identity, load_wafer, match_counts_by_voltage, voltage_text
@@ -243,6 +248,33 @@ def view(wafer, query):
             "page": page, "highlighted": highlighted}
 
 
+def chart_image_bytes(data):
+    kind = data.get("format")
+    content = data.get("content")
+    if kind not in ("svg", "png") or not isinstance(content, str) or len(content) > 48 * 1024 * 1024:
+        raise ValueError("Invalid chart image format or size.")
+    if kind == "svg":
+        payload = content.encode("utf-8")
+        try:
+            if "<!DOCTYPE" in content.upper() or "<!ENTITY" in content.upper():
+                raise ValueError("Unsupported SVG document.")
+            root = ElementTree.fromstring(payload)
+            if root.tag != "{http://www.w3.org/2000/svg}svg":
+                raise ValueError("Invalid SVG image.")
+        except ElementTree.ParseError as exc:
+            raise ValueError("Invalid SVG image.") from exc
+    else:
+        try:
+            payload = base64.b64decode(content, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("Invalid PNG image.") from exc
+        if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("Invalid PNG image.")
+    if len(payload) > 32 * 1024 * 1024:
+        raise ValueError("Chart image exceeds 32 MiB.")
+    return payload
+
+
 class DesktopAPI:
     def __init__(self):
         self._window = None
@@ -271,6 +303,8 @@ class DesktopAPI:
                     if wafer is None:
                         raise ValueError("Run analysis first.")
                     return view(wafer, data)
+            if action == "save-chart":
+                return self._save_chart(data)
             if action == "pick":
                 return self._pick(data["kind"])
             if action == "demo":
@@ -299,6 +333,29 @@ class DesktopAPI:
             return {"started": True}
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return {"bridge_error": str(exc)}
+
+    def _save_chart(self, data):
+        from webview import FileDialog
+
+        payload = chart_image_bytes(data)
+        kind = data["format"]
+        filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(data.get("filename") or "Chart"))[:160]
+        filename = str(Path(filename).with_suffix("." + kind))
+        chosen = self._window.create_file_dialog(FileDialog.SAVE, save_filename=filename,
+                                                  file_types=(f"{kind.upper()} image (*.{kind})",))
+        if not chosen:
+            return {"cancelled": True}
+        path = Path(chosen if isinstance(chosen, str) else chosen[0]).with_suffix("." + kind)
+        draft = None
+        try:
+            with NamedTemporaryFile(dir=path.parent, prefix=".sram-chart-", delete=False) as stream:
+                draft = Path(stream.name)
+                stream.write(payload)
+            draft.replace(path)
+        finally:
+            if draft is not None:
+                draft.unlink(missing_ok=True)
+        return {"path": str(path), "cancelled": False}
 
     def _pick(self, kind):
         from webview import FileDialog

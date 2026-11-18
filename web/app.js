@@ -405,7 +405,7 @@ async function refreshMap() {
       panel.append(el('h3',pattern+' Vmin'+(pattern!=='Merge 90%'&&s.report.mode==='FBC0-Tail'?' · Tail-adjusted FBC0':'')));
       const map=el('div',null,'wafer');
       renderBoard(map,datasets[i],commonScale,pattern);
-      panel.append(map);pair.append(panel);
+      panel.append(chartExportActions(map,pattern+' Vmin Map',()=>$('map-legend')),map);pair.append(panel);
     }
     board.append(pair);
     const sources=[...dualPatterns,'Merge 90%'];
@@ -417,6 +417,7 @@ async function refreshMap() {
     const selectedRow=rows.find(row=>chipKey(row)===s.selected);
     selectMapJudge(selectedRow,'Chip Vmin');showChip(selectedRow);
   }
+  put('map-image-actions',...(dual?[]:[chartExportActions(board,layers[s.layer]+' · '+s.pattern,()=>$('map-legend'))]));
   fitMapStage();
 }
 $('layer').onchange=safe(()=>{s.layer=$('layer').value;return refreshMap();});
@@ -510,6 +511,7 @@ async function refreshDistribution() {
     tile.title=title;
     tile.setAttribute('aria-label',title);
   }
+  put('matrix-image-actions',chartExportActions(board,'256 BLK Vmin Distribution · '+source,()=>$('dist-legend')));
   renderVminOutliers(box,entries);
   renderTailList(entries.filter(entry=>entry.tail));
   fitMapStage();
@@ -525,6 +527,7 @@ function setDistributionView(showOutliers) {
   $('dist-matrix').hidden=showOutliers;
   $('dist-legend').hidden=showOutliers;
   $('dist-wts').hidden=showOutliers;
+  $('matrix-image-actions').hidden=showOutliers;
   $('dist-match-label').hidden=showOutliers||s.report?.source_mode!=='full';
   $('dist-match-legend').hidden=showOutliers||s.report?.source_mode!=='full'||!$('dist-match').checked;
   for(const [id,active] of [['dist-view-matrix',!showOutliers],['dist-view-outliers',showOutliers]]){
@@ -598,7 +601,7 @@ function renderVminOutliers(box,entries) {
   }
   const scroller=el('div',null,'outlier-grid-scroll');
   scroller.append(board);
-  right.append(scroller);
+  right.append(chartExportActions(board,'BLK Outlier Locations',()=>key),scroller);
   const grid=el('div',null,'vmin-stat-plots pattern-charts');
   grid.append(left,right);
   const notes=count<box.minimum_samples
@@ -686,6 +689,118 @@ function section(title, node, collapsible=false) {
   } else block.append(caption,sc);
   return block;
 }
+function chartExportContext(source) {
+  if(s.page==='correlation')return [s.report?.label,'WT'+$('correlation-wt').value,$('correlation-scope').selectedOptions[0]?.textContent,
+    s.correlationSelection===null?'All Chips':'Selected Chips: '+s.correlationSelection.join('; ')].filter(Boolean).join(' · ');
+  if(source.classList.contains('wafer'))return [s.report?.label,'WT'+s.wt,s.report?.mode].filter(Boolean).join(' · ');
+  return [s.report?.label,'WT'+s.wt,s.selected?'Chip '+s.selected:'',s.block!=null?'BLK '+s.block:'',s.report?.mode].filter(Boolean).join(' · ');
+}
+function exportSvgNode(tag,attrs={},text) {
+  const node=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const [key,value] of Object.entries(attrs))node.setAttribute(key,value);
+  if(text!=null)node.textContent=text;
+  return node;
+}
+function chartExportDocument(source,label,legend,context) {
+  const isSvg=source instanceof SVGElement;
+  let width,height,graphic;
+  if(isSvg){
+    const box=source.viewBox.baseVal;width=box.width;height=box.height;
+    graphic=source.cloneNode(true);
+    const originals=[source,...source.querySelectorAll('*')],clones=[graphic,...graphic.querySelectorAll('*')];
+    const properties=['fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','font-family','font-size','font-weight','font-style','letter-spacing','text-anchor','dominant-baseline','paint-order'];
+    originals.forEach((node,index)=>{
+      const style=getComputedStyle(node);
+      clones[index].removeAttribute('style');
+      for(const key of properties)clones[index].style.setProperty(key,style.getPropertyValue(key));
+      clones[index].removeAttribute('tabindex');
+    });
+    graphic.setAttribute('x',16);graphic.setAttribute('y',0);
+    graphic.setAttribute('width',width);graphic.setAttribute('height',height);
+    graphic.style.display='block';
+    width+=32;
+  }else{
+    // Element geometry includes off-screen grid cells; no viewport screenshot or clipping.
+    const nodes=[source,...source.querySelectorAll('*')].filter(n=>getComputedStyle(n).display!=='none');
+    const rectangles=nodes.map(n=>n.getBoundingClientRect());
+    const left=Math.min(...rectangles.map(r=>r.left)),top=Math.min(...rectangles.map(r=>r.top));
+    width=Math.max(...rectangles.map(r=>r.right))-left+32;
+    height=Math.max(...rectangles.map(r=>r.bottom))-top+32;
+    graphic=exportSvgNode('g');
+    for(const node of nodes){
+      const r=node.getBoundingClientRect(),style=getComputedStyle(node);
+      if(!r.width||!r.height||style.visibility==='hidden')continue;
+      if(style.backgroundColor!=='rgba(0, 0, 0, 0)')graphic.append(exportSvgNode('rect',{
+        x:r.left-left+16,y:r.top-top+16,width:r.width,height:r.height,fill:style.backgroundColor,
+        stroke:parseFloat(style.borderWidth)>0?style.borderColor:'none','stroke-width':parseFloat(style.borderWidth)||0}));
+      for(const child of node.childNodes){
+        if(child.nodeType!==Node.TEXT_NODE||!child.textContent.trim())continue;
+        const range=document.createRange();range.selectNodeContents(child);const textBox=range.getBoundingClientRect();
+        graphic.append(exportSvgNode('text',{x:textBox.left-left+16,y:textBox.top-top+16+textBox.height*.8,
+          fill:style.color,'font-family':style.fontFamily,'font-size':style.fontSize,'font-weight':style.fontWeight},child.textContent.trim()));
+      }
+    }
+  }
+  if(!width||!height)throw new Error('Display the chart before exporting it.');
+  width=Math.max(560,Math.ceil(width));
+  const lines=text=>{
+    const limit=Math.max(30,Math.floor((width-32)/7.4)),parts=[];
+    for(let i=0;i<text.length;i+=limit)parts.push(text.slice(i,i+limit));
+    return parts.length?parts:[''];
+  };
+  const summary=isSvg?source.parentElement?.parentElement?.querySelector(':scope > .chart-summary')?.textContent:'';
+  const titles=lines(label),contexts=lines([context,summary].filter(Boolean).join(' · ')),header=16+titles.length*24+contexts.length*19+12;
+  const legendItems=legend?[...legend.children].map(item=>({text:item.textContent.trim(),color:getComputedStyle(item.querySelector('i')||item).backgroundColor})):[];
+  const legendLines=legendItems.flatMap(item=>lines(item.text).map((text,index)=>({...item,text,first:index===0})));
+  const totalHeight=Math.ceil(header+height+legendLines.length*22+16);
+  const result=exportSvgNode('svg',{xmlns:'http://www.w3.org/2000/svg',width,height:totalHeight,viewBox:`0 0 ${width} ${totalHeight}`,role:'img','aria-label':label});
+  result.append(exportSvgNode('rect',{width:'100%',height:'100%',fill:'#ffffff'}),exportSvgNode('title',{},label),exportSvgNode('desc',{},context));
+  titles.forEach((text,i)=>result.append(exportSvgNode('text',{x:16,y:30+i*24,fill:'#17324d','font-family':'Segoe UI, Arial, sans-serif','font-size':18,'font-weight':600},text)));
+  contexts.forEach((text,i)=>result.append(exportSvgNode('text',{x:16,y:24+titles.length*24+i*19,fill:'#526579','font-family':'Segoe UI, Arial, sans-serif','font-size':13},text)));
+  const group=exportSvgNode('g',{transform:`translate(0 ${header})`});group.append(graphic);result.append(group);
+  legendLines.forEach((item,i)=>{
+    const y=header+height+16+i*22;
+    if(item.first)result.append(exportSvgNode('rect',{x:16,y:y-11,width:12,height:12,fill:item.color,stroke:'#9eafbd'}));
+    result.append(exportSvgNode('text',{x:36,y,fill:'#304b62','font-family':'Segoe UI, Arial, sans-serif','font-size':13},item.text));
+  });
+  return result;
+}
+async function exportChartImage(source,label,legend,format) {
+  const context=chartExportContext(source);
+  const svg=chartExportDocument(source,label,legend,context);
+  const serialized=new XMLSerializer().serializeToString(svg);
+  let content=serialized;
+  if(format==='png'){
+    const width=Number(svg.getAttribute('width')),height=Number(svg.getAttribute('height'));
+    const scale=Math.min(3,16000/width,16000/height,Math.sqrt(32000000/(width*height)));
+    const url=URL.createObjectURL(new Blob([serialized],{type:'image/svg+xml;charset=utf-8'}));
+    try{
+      const image=new Image();
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Unable to render chart image.'));image.src=url;});
+      const canvas=document.createElement('canvas');canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
+      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('PNG rendering is unavailable.');
+      ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+      content=canvas.toDataURL('image/png').split(',')[1];
+    }finally{URL.revokeObjectURL(url);}
+  }
+  const filename=(label+' '+context).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,150)+'.'+format;
+  const result=await api('save-chart',{format,content,filename});
+  if(!result.cancelled)notice('Exported '+result.path);
+}
+function chartExportActions(source,label,legend=()=>null) {
+  const bar=el('div',null,'chart-export-actions');
+  for(const format of ['svg','png']){
+    const button=el('button','Export '+format.toUpperCase(),'quiet');button.type='button';
+    button.setAttribute('aria-label','Export '+label+' as '+format.toUpperCase());
+    button.onclick=safe(async()=>{
+      if(s.busy)throw new Error('Wait for the current operation to finish.');
+      button.disabled=true;
+      try{await exportChartImage(source,label,legend(),format);}finally{button.disabled=false;}
+    });bar.append(button);
+  }
+  return bar;
+}
+
 function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, xLabel='Test Voltage (V) · Config Order', footer=null, rightMargin=35) {
   const wrap = el('div', null, 'plot');
   const ns = 'http://www.w3.org/2000/svg';
@@ -694,7 +809,7 @@ function chartFrame(label, unit, maximum, ticks, width, tickLabel, height=318, x
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', label);
   svg.style.minWidth = Math.max(500,width-30)+'px';
-  wrap.append(svg);
+  wrap.append(chartExportActions(svg,label,()=>wrap.parentElement?.querySelector(':scope > .chart-legend')||wrap.closest('.vmin-stat-plots')?.querySelector('.chart-legend')),svg);
   const add = (tag, attrs, value, parent=svg) => {
     const node = document.createElementNS(ns, tag);
     for (const [key, val] of Object.entries(attrs)) node.setAttribute(key,val);
@@ -946,7 +1061,7 @@ function correlationMap() {
     });board.append(button);
   }
   const legend=chartLegend(Object.values(monitorCategories).map(info=>info.label),Object.values(monitorCategories).map(info=>info.color));
-  scroll.append(board);box.append(scroll,legend,el('p','W/R worse compares captured monitor Fail Address counts, not physical failure severity or complete FBC. No data means incomplete Function coverage or missing W/R monitor data. Borders indicate selected Chips.','correlation-note'));
+  scroll.append(board);box.append(chartExportActions(board,'W_R Correlation Wafer Map',()=>legend),scroll,legend,el('p','W/R worse compares captured monitor Fail Address counts, not physical failure severity or complete FBC. No data means incomplete Function coverage or missing W/R monitor data. Borders indicate selected Chips.','correlation-note'));
   return box;
 }
 async function refreshCorrelation() {

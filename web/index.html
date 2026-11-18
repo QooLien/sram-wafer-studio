@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'">
 <title>SRAM Wafer Studio</title>
 <!-- APP_STYLE -->
 </head>
@@ -50,7 +50,7 @@
     </div>
     <div id="map-layout" class="map-layout">
       <section class="card map-card">
-        <div id="map-legend" class="legend"></div>
+        <div id="map-legend" class="legend"></div><div id="map-image-actions"></div>
         <div class="map-scroll"><div id="wafer-grid" class="wafer"></div></div>
       </section>
       <aside class="map-inspector">
@@ -70,6 +70,7 @@
           <button id="dist-view-outliers" type="button" aria-pressed="false">Box Plot &amp; Outliers</button>
         </div>
         <p id="dist-judge" role="status"></p>
+        <div id="matrix-image-actions"></div>
         <div id="dist-legend" class="legend"></div>
         <p id="dist-wts"></p>
         <p id="dist-note" hidden></p>

@@ -1,11 +1,12 @@
 # Windows 桌面版
 
-[下載 SRAM Analysis Tool v1.8.6.zip](SRAM%20Analysis%20Tool%20v1.8.6.zip)
+[下載 SRAM Analysis Tool v1.8.7.zip](SRAM%20Analysis%20Tool%20v1.8.7.zip)
 
-v1.8.6 新增 FBC0-Tail（Tail-adjusted FBC0），逐 BLK／Function 以早期少量 FBC、增加倍率、電壓正規化斜率及低電壓後續確認辨識可排除區段，再依 FBC0 取前一電壓。提供六項門檻設定、原始／修正 Vmin、排除 TNO 與證據；Excel 保存設定與 Tail FBC0 Audit。預設值為待實測校準的保守起點；證據不足保留原始 FBC0。既有 FBC0–FBC10、FBC90%、三張 90% Accumulation 與 Merge 90% 均保留；Tail BLK 排除維持 FBC90% 基礎。
+v1.8.7 新增圖表原圖匯出：Export SVG 向量圖與 Export PNG 高解析圖。支援 FBC90% Accumulation、FBC／W/R 圖、相關性散點圖、Tail 箱型圖、Wafer Map、256 BLK 矩陣與離群位置圖。包含標題、分析範圍、完整座標與圖例；不依可見捲動範圍截圖。使用桌面另存視窗，取消不產生檔案。PNG 一般為 3 倍尺寸，大圖自動限制像素量；原判定規則不變。
 
 保留版本：
 
+- [v1.8.6](SRAM%20Analysis%20Tool%20v1.8.6.zip)
 - [v1.8.5](SRAM%20Analysis%20Tool%20v1.8.5.zip)
 - [v1.8.4](SRAM%20Analysis%20Tool%20v1.8.4.zip)
 - [v1.8.3](SRAM%20Analysis%20Tool%20v1.8.3.zip)

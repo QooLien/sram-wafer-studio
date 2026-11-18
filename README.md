@@ -74,3 +74,9 @@ The application interface, validation messages and progress notifications are in
 例：`0 → 1 → 2 → 80 → 500` 對應 `1.035 → 0.990 → 0.945 → 0.900 → 0.855 V`，可將 1、2 FBC 的早期觀測列為排除候選，修正 FBC0 Vmin 為 0.945 V。這是 FBC 曲線啟發式，不代表已辨識或扣除相同物理地址的 Tail Bit。
 
 BLK 明細新增 **Tail-adjusted FBC0 evidence**，顯示原始／修正 Vmin、排除 TNO、早期 FBC 基準、有效 FBC 門檻（早期上限＋1）、增加倍率、斜率與後續確認。完整 Excel 與 FBC Excel 新增 **Tail FBC0 Audit**；Config 的 L:M 欄保存六項設定，重新匯入 Excel Config 時一併還原。只有證據充分的 Function 會排除早期觀測，其他少量 Fail 不會自動忽略。
+
+### 圖表原圖匯出（v1.8.7）
+
+圖表旁提供 **Export SVG**（可縮放向量原圖）及 **Export PNG**（白底高解析圖片），使用 Windows 桌面另存視窗選擇檔名與位置；取消不寫入檔案。支援各 FBC90% Accumulation、FBC／W/R 曲線、W/R correlation 散點圖、Tail box plot、Wafer Map、256 BLK 矩陣及 BLK 離群位置圖。三張 Vmin Map 可各別匯出並保留共同色階圖例。
+
+匯出會保存整張圖的座標、電壓標籤、雙座標軸、顏色與適用的圖例，另附圖名及 WT／Chip／BLK 分析範圍；不含按鈕與提示浮窗，不受目前捲動位置裁切。SVG 嵌入圖形樣式，PNG 一般使用原圖尺寸的 3 倍；大圖自動降低倍率以限制為最多 3,200 萬像素、單邊 16,000 像素。單檔上限 32 MiB。檔案副檔名依所選格式統一。

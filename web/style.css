@@ -257,3 +257,5 @@ text.chart-fbc-axis,.chart-fbc-tick{fill:#9c5821;stroke:none}
 .tail-bit-settings label{display:grid;gap:5px;min-width:170px}
 .tail-bit-settings input{width:150px}
 #tail-mode-hint{flex-basis:100%;color:var(--muted);font-size:12px}
+
+.chart-export-actions{display:flex;justify-content:flex-end;gap:6px;padding:5px 8px;flex-wrap:wrap}.chart-export-actions button{font-size:12px;white-space:nowrap}
